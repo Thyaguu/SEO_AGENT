@@ -1,0 +1,1 @@
+"""OpenCode Execution Agent - executes tasks without validation."""
