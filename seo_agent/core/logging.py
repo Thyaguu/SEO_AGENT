@@ -137,3 +137,22 @@ def reset_loggers() -> None:
     """
     global _loggers
     _loggers = {}
+
+
+def log_stage_banner(
+    logger: logging.Logger,
+    title: str,
+    width: int = 60,
+    char: str = "=",
+) -> None:
+    """Format and log a visually distinct banner for major pipeline stages.
+
+    Args:
+        logger: Logger instance to output the banner.
+        title: Stage title to display in the banner.
+        width: Banner line width in characters.
+        char: Character to use for banner border.
+    """
+    banner_line = char * width
+    centered_title = title.strip().upper().center(width)
+    logger.info(f"\n{banner_line}\n\n{centered_title}\n\n{banner_line}\n")

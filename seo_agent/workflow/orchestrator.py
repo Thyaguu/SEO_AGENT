@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, Callable, Union
 import asyncio
 import traceback
 
-from seo_agent.core.logging import get_logger
+from seo_agent.core.logging import get_logger, log_stage_banner
 from seo_agent.core.result import Failure, Result, Success
 from seo_agent.models.api import KeywordPayload, SEOPayload
 from seo_agent.models.repository import PageInfo
@@ -169,6 +169,7 @@ class WorkflowOrchestrator:
 
         # Check final state
         if context.is_successful():
+            log_stage_banner(logger, "Workflow Completed")
             logger.info("Workflow completed successfully")
             return Success(context)
         elif context.has_errors():
@@ -194,6 +195,7 @@ class WorkflowOrchestrator:
             Success with updated context, or failure with error.
         """
         stage_info = get_stage_info(stage)
+        log_stage_banner(logger, stage_info.name)
         logger.info(f"Executing stage: {stage_info.name}")
 
         # Get handler
@@ -766,6 +768,7 @@ def _create_seo_update_handler(
 
             # Invoke SitemapService
             if sitemap_service:
+                log_stage_banner(logger, "Sitemap Generation", char="-")
                 logger.info("Starting sitemap generation")
                 sitemap_path = context.repository_path / "sitemap.xml"
                 sitemap_service.set_sitemap_path(sitemap_path)
@@ -796,6 +799,7 @@ def _create_seo_update_handler(
 
             # Invoke RobotsService
             if robots_service:
+                log_stage_banner(logger, "Robots.txt Generation", char="-")
                 logger.info("Starting robots generation")
                 robots_path = context.repository_path / "robots.txt"
                 robots_service.set_robots_path(robots_path)
