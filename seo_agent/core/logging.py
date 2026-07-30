@@ -212,9 +212,12 @@ def log_stage_report(
     if extra_sections:
         for title, items in extra_sections:
             lines.append(f"{title}")
-            lines.append("-" * len(title))
+            lines.append("-" * max(len(title), 5))
             for item in items:
-                lines.append(f"{item}")
+                item_str = str(item)
+                if not item_str.startswith("- ") and not item_str.startswith("• "):
+                    item_str = f"- {item_str}"
+                lines.append(item_str)
             lines.append("")
 
     lines.append("Status")

@@ -303,17 +303,24 @@ class WorkflowOrchestrator:
                     "Discovering static routes...",
                     "Mapping page paths...",
                 ]
-                output_data.append(("Total Pages Discovered", str(len(context.pages))))
                 if context.pages:
-                    routes = [p.route for p in context.pages]
-                    extra_sections.append(("Discovered Routes", routes))
+                    page_items = [f"{Path(p.path).name} ({p.route})" if hasattr(p, "path") else str(p.route) for p in context.pages]
+                    extra_sections.append(("Pages Discovered", page_items))
+                output_data.append(("Total Pages Discovered", str(len(context.pages))))
 
             elif stage == WorkflowStage.METADATA_EXTRACTION:
-                input_data.append(("Discovered Pages", str(len(context.page_info))))
+                input_data.append(("Discovered Pages Count", str(len(context.page_info))))
                 processing_steps = [
                     "Parsing HTML head tags...",
                     "Extracting title, description, canonical, OpenGraph, JSON-LD...",
                 ]
+                if context.page_info:
+                    meta_items = []
+                    for p in context.page_info:
+                        title_str = f'"{p.title}"' if p.title else "None"
+                        desc_str = f'"{p.metadata.description[:60]}..."' if p.metadata and p.metadata.description else "None"
+                        meta_items.append(f"{p.route} -> Title: {title_str} | Meta Description: {desc_str}")
+                    extra_sections.append(("Extracted Page Metadata", meta_items))
                 output_data.append(("Pages Parsed", str(len(context.page_info))))
 
             elif stage == WorkflowStage.PLANNING:
@@ -326,19 +333,32 @@ class WorkflowOrchestrator:
                     "Generating multi-phase execution tasks...",
                 ]
                 if context.execution_plan:
+                    task_items = []
+                    for t in context.execution_plan.tasks:
+                        task_id = getattr(t, "id", getattr(t, "task_id", "task"))
+                        phase = getattr(t, "phase", 1)
+                        desc = getattr(t, "description", getattr(t, "title", "Task"))
+                        target = getattr(t, "target_file", "")
+                        task_items.append(f"[{task_id}] Phase {phase}: {desc} ({target})")
+                    if task_items:
+                        extra_sections.append(("Planned Tasks", task_items))
                     output_data.append(("Total Tasks Planned", str(len(context.execution_plan.tasks))))
                     output_data.append(("Execution Phases", str(len(context.execution_plan.phases))))
 
             elif stage == WorkflowStage.EXECUTION:
-                input_data.append(("Planned Tasks", str(len(context.execution_plan.tasks)) if context.execution_plan else "0"))
+                input_data.append(("Planned Tasks Count", str(len(context.execution_plan.tasks)) if context.execution_plan else "0"))
                 processing_steps = [
                     "Executing task modifications...",
                     "Invoking OpenCode client...",
                     "Applying SEO changes...",
                 ]
                 if context.execution_result:
-                    output_data.append(("Executed Tasks", str(len(context.execution_result.executed_tasks))))
-                    output_data.append(("Files Modified", str(len(context.execution_result.files_modified))))
+                    if context.execution_result.executed_tasks:
+                        extra_sections.append(("Executed Tasks", [str(getattr(t, "task_id", t)) for t in context.execution_result.executed_tasks]))
+                    if context.execution_result.files_modified:
+                        extra_sections.append(("Files Modified", [str(f) for f in context.execution_result.files_modified]))
+                    output_data.append(("Executed Tasks Count", str(len(context.execution_result.executed_tasks))))
+                    output_data.append(("Files Modified Count", str(len(context.execution_result.files_modified))))
 
             elif stage == WorkflowStage.REVIEW:
                 input_data.append(("Execution Results", "Passed from Execution Stage"))
@@ -350,6 +370,8 @@ class WorkflowOrchestrator:
                 if context.review_result:
                     output_data.append(("Approved", str(context.review_result.approved)))
                     output_data.append(("Quality Score", f"{context.review_result.score:.1f}" if hasattr(context.review_result, "score") else "1.0"))
+                    if hasattr(context.review_result, "issues") and context.review_result.issues:
+                        extra_sections.append(("Validation Issues", [str(i) for i in context.review_result.issues]))
 
             elif stage == WorkflowStage.SEO_UPDATE:
                 input_data.append(("Repository Path", str(context.repository_path)))
