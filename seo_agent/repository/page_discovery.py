@@ -622,18 +622,21 @@ class PageDiscovery:
             List of discovered pages.
         """
         pages: list[DiscoveredPage] = []
-        seen_paths: set[str] = set()
+        seen_routes: set[str] = set()
+        seen_files: set[str] = set()
 
         # Scan for HTML files
-        for html_file in root.rglob("*.html"):
+        for html_file in root.resolve().rglob("*.html"):
             if self._is_page_file(html_file):
                 route_path = self._html_to_route_path(html_file, root)
-                if route_path and route_path not in seen_paths:
-                    seen_paths.add(route_path)
+                abs_file = str(html_file.resolve())
+                if route_path and route_path not in seen_routes and abs_file not in seen_files:
+                    seen_routes.add(route_path)
+                    seen_files.add(abs_file)
                     pages.append(
                         DiscoveredPage(
                             url_path=route_path,
-                            file_path=str(html_file),
+                            file_path=abs_file,
                             page_type=PageType.GENERAL,
                             title=None,
                             has_dynamic_params=False,
@@ -680,7 +683,9 @@ class PageDiscovery:
             Route path.
         """
         try:
-            relative = html_file.relative_to(root)
+            resolved_html = html_file.resolve()
+            resolved_root = root.resolve()
+            relative = resolved_html.relative_to(resolved_root)
             parts = list(relative.parts)
 
             if parts[-1] == "index.html":
@@ -692,7 +697,7 @@ class PageDiscovery:
             return path if path else "/"
 
         except ValueError:
-            return "/"
+            return "/" + html_file.name
 
     def discover_sitemap(
         self,

@@ -372,16 +372,39 @@ class WorkflowOrchestrator:
                     "Verifying h1 hierarchy...",
                 ]
                 if context.review_result:
-                    output_data.append(("Approved", str(context.review_result.approved)))
+                    output_data.append(("Validation Status", "Approved" if context.review_result.approved else "Rejected"))
                     score_val = getattr(context.review_result, "overall_score", 100.0)
-                    output_data.append(("Quality Score", f"{score_val:.1f}"))
+                    output_data.append(("Overall Score", f"{score_val:.1f}"))
+                    val_items = []
+                    issue_items = []
+                    warn_items = []
                     if hasattr(context.review_result, "validation_results") and context.review_result.validation_results:
-                        val_items = []
                         for vr in context.review_result.validation_results:
                             val_status = "Passed" if vr.passed else "Failed"
                             val_items.append(f"{vr.item_id} ({vr.item_type}): {val_status}")
-                        if val_items:
-                            extra_sections.append(("Validation Results", val_items))
+                            if getattr(vr, "issues", None):
+                                for issue in vr.issues:
+                                    msg = issue.message
+                                    sev = issue.severity.value if hasattr(issue.severity, "value") else str(issue.severity)
+                                    if sev == "warning":
+                                        warn_items.append(f"[WARNING] {msg}")
+                                    else:
+                                        issue_items.append(f"[{sev.upper()}] {msg}")
+                    if hasattr(context.review_result, "feedback") and context.review_result.feedback:
+                        if getattr(context.review_result.feedback, "issues", None):
+                            for issue in context.review_result.feedback.issues:
+                                msg = issue.message
+                                sev = issue.severity.value if hasattr(issue.severity, "value") else str(issue.severity)
+                                if sev == "warning":
+                                    warn_items.append(f"[WARNING] {msg}")
+                                else:
+                                    issue_items.append(f"[{sev.upper()}] {msg}")
+                    if val_items:
+                        extra_sections.append(("Validation Results", val_items))
+                    if warn_items:
+                        extra_sections.append(("Warnings", warn_items))
+                    if issue_items:
+                        extra_sections.append(("Issues", issue_items))
 
             elif stage == WorkflowStage.SEO_UPDATE:
                 input_data.append(("Repository Path", str(context.repository_path)))
@@ -645,7 +668,7 @@ def _create_metadata_extraction_handler(
         try:
             page_info_list = []
             for page in context.pages:
-                result = metadata_parser.parse_file(page.file_path)
+                result = metadata_parser.parse_file(page.file_path, url_path=page.url_path)
                 if result.is_success():
                     page_metadata = result.get_or_none()
                     # Construct PageInfo from DiscoveredPage (route, file_path) + PageMetadata

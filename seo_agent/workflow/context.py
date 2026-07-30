@@ -10,7 +10,7 @@ until completion or failure.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -225,6 +225,8 @@ class WorkflowContext:
             info: List of page info with metadata.
         """
         self.page_info = info
+        if self.repository_info:
+            self.repository_info = replace(self.repository_info, pages=tuple(info))
 
     def set_execution_plan(self, plan: ExecutionPlan) -> None:
         """Set execution plan.
