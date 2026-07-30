@@ -372,7 +372,7 @@ class WorkflowOrchestrator:
                     "Verifying h1 hierarchy...",
                 ]
                 if context.review_result:
-                    output_data.append(("Validation Status", "Approved" if context.review_result.approved else "Rejected"))
+                    output_data.append(("Validation Status", "Approved" if context.review_result.is_approved else "Rejected"))
                     score_val = getattr(context.review_result, "overall_score", 100.0)
                     output_data.append(("Overall Score", f"{score_val:.1f}"))
                     val_items = []
