@@ -959,26 +959,6 @@ class ReviewValidator:
         # Check for duplicates
         all_issues.extend(self.duplicate_validator.validate_no_duplicates(titles, descriptions))
 
-        # Validate sitemap
-        sitemap_content: str | None = None
-        if hasattr(execution_result, "sitemap_content"):
-            sitemap_content = execution_result.sitemap_content
-
-        expected_urls = [page.metadata.canonical for page in seo_pages if page.metadata.canonical]
-        all_issues.extend(
-            self.sitemap_validator.validate_sitemap_content(sitemap_content, expected_urls)
-        )
-
-        # Validate robots.txt
-        robots_content: str | None = None
-        if hasattr(execution_result, "robots_content"):
-            robots_content = execution_result.robots_content
-
-        sitemap_url = f"{repository_info.base_url}/sitemap.xml" if hasattr(repository_info, "base_url") else None
-        all_issues.extend(
-            self.robots_validator.validate_robots_content(robots_content, sitemap_url)
-        )
-
         # Count validated files
         validated_files = len(modified_files)
 

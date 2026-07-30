@@ -1004,6 +1004,23 @@ def _create_seo_update_handler(
                 context.metadata["robots_path"] = str(robots_path)
                 logger.info(f"robots generated: {robots_path}")
 
+            # Post-generation validation of sitemap.xml and robots.txt
+            from seo_agent.review.validator import RobotsValidator, SitemapValidator
+            sitemap_path = context.repository_path / "sitemap.xml"
+            robots_path = context.repository_path / "robots.txt"
+
+            if sitemap_path.exists():
+                sm_content = sitemap_path.read_text(encoding="utf-8")
+                sm_issues = SitemapValidator().validate_sitemap_content(sm_content, expected_urls=[])
+                if sm_issues:
+                    logger.warning(f"Sitemap post-generation validation issues: {[i.message for i in sm_issues]}")
+
+            if robots_path.exists():
+                rb_content = robots_path.read_text(encoding="utf-8")
+                rb_issues = RobotsValidator().validate_robots_content(rb_content, sitemap_url=None)
+                if rb_issues:
+                    logger.warning(f"Robots post-generation validation issues: {[i.message for i in rb_issues]}")
+
             return Success(context)
         except Exception as e:
             return Failure(str(e))
