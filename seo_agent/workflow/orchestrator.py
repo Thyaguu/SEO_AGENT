@@ -277,10 +277,10 @@ class WorkflowOrchestrator:
                     "Identifying project structure...",
                 ]
                 if context.repository_info:
-                    fw = context.framework_info.framework if context.framework_info else "static_html"
-                    output_data.append(("Framework", str(fw)))
-                    html_files = [Path(p.path).name if hasattr(p, "path") else str(p) for p in context.repository_info.html_pages]
-                    if html_files:
+                    fw_type = context.repository_info.framework.framework_type.value if context.repository_info.framework else "static_html"
+                    output_data.append(("Framework", str(fw_type)))
+                    if context.repository_info.pages:
+                        html_files = [Path(p.file_path).name for p in context.repository_info.pages]
                         extra_sections.append(("Files Found", html_files))
 
             elif stage == WorkflowStage.FRAMEWORK_DETECTION:
@@ -291,19 +291,19 @@ class WorkflowOrchestrator:
                     "Identifying routing architecture...",
                 ]
                 if context.framework_info:
-                    output_data.append(("Framework", str(context.framework_info.framework)))
-                    output_data.append(("Routing Type", str(context.framework_info.routing_type)))
+                    output_data.append(("Framework", str(context.framework_info.framework_type.value)))
+                    output_data.append(("Routing Type", str(context.framework_info.routing_strategy.value)))
 
             elif stage == WorkflowStage.PAGE_DISCOVERY:
                 input_data.append(("Repository Path", str(context.repository_path)))
                 if context.framework_info:
-                    input_data.append(("Framework", str(context.framework_info.framework)))
+                    input_data.append(("Framework", str(context.framework_info.framework_type.value)))
                 processing_steps = [
                     "Discovering static routes...",
                     "Mapping page paths...",
                 ]
                 if context.pages:
-                    page_items = [f"{Path(p.path).name} ({p.route})" if hasattr(p, "path") else str(p.route) for p in context.pages]
+                    page_items = [f"{Path(p.file_path).name} ({p.url_path})" for p in context.pages]
                     extra_sections.append(("Pages Discovered", page_items))
 
             elif stage == WorkflowStage.METADATA_EXTRACTION:
@@ -314,9 +314,10 @@ class WorkflowOrchestrator:
                 if context.page_info:
                     meta_items = []
                     for p in context.page_info:
+                        clean_route = p.route if p.route else Path(p.file_path).name
                         title_str = f'"{p.title}"' if p.title else "None"
-                        desc_str = f'"{p.metadata.description[:60]}..."' if p.metadata and p.metadata.description else "None"
-                        meta_items.append(f"{p.route} -> Title: {title_str} | Meta Description: {desc_str}")
+                        desc_str = f'"{p.metadata.description[:60]}..."' if (p.metadata and p.metadata.description) else "None"
+                        meta_items.append(f"{clean_route} -> Title: {title_str} | Meta Description: {desc_str}")
                     extra_sections.append(("Extracted Page Metadata", meta_items))
 
             elif stage == WorkflowStage.PLANNING:
@@ -329,16 +330,15 @@ class WorkflowOrchestrator:
                     "Generating multi-phase execution tasks...",
                 ]
                 if context.execution_plan:
+                    output_data.append(("Execution Phases", str(len(context.execution_plan.phases))))
                     task_items = []
-                    for t in context.execution_plan.tasks:
-                        task_id = getattr(t, "id", getattr(t, "task_id", "task"))
-                        phase = getattr(t, "phase", 1)
-                        desc = getattr(t, "description", getattr(t, "title", "Task"))
-                        target = getattr(t, "target_file", "")
-                        task_items.append(f"[{task_id}] Phase {phase}: {desc} ({target})")
+                    for phase in context.execution_plan.phases:
+                        for t in phase.tasks:
+                            target_file = t.input_data.get("file_path") or t.input_data.get("target_file")
+                            target_str = f" [{Path(target_file).name}]" if target_file else ""
+                            task_items.append(f"[{t.task_id}] {phase.name}: {t.description}{target_str}")
                     if task_items:
                         extra_sections.append(("Planned Tasks", task_items))
-                    output_data.append(("Execution Phases", str(len(context.execution_plan.phases))))
 
             elif stage == WorkflowStage.EXECUTION:
                 processing_steps = [
@@ -346,11 +346,21 @@ class WorkflowOrchestrator:
                     "Invoking OpenCode client...",
                     "Applying SEO changes...",
                 ]
-                if context.execution_result:
-                    if context.execution_result.executed_tasks:
-                        extra_sections.append(("Executed Tasks", [str(getattr(t, "task_id", t)) for t in context.execution_result.executed_tasks]))
-                    if context.execution_result.files_modified:
-                        extra_sections.append(("Files Modified", [str(f) for f in context.execution_result.files_modified]))
+                if context.execution_result and context.execution_result.phase_results:
+                    executed_task_items = []
+                    modified_files = []
+                    for pr in context.execution_result.phase_results:
+                        for tr in pr.task_results:
+                            status_str = "SUCCESS" if tr.success else "FAILED"
+                            executed_task_items.append(f"[{tr.task_id}] Status: {status_str}")
+                            if tr.output:
+                                m_file = tr.output.get("file_path") or tr.output.get("target_file")
+                                if m_file:
+                                    modified_files.append(Path(m_file).name)
+                    if executed_task_items:
+                        extra_sections.append(("Executed Tasks", executed_task_items))
+                    if modified_files:
+                        extra_sections.append(("Files Modified", modified_files))
 
             elif stage == WorkflowStage.REVIEW:
                 input_data.append(("Execution Results", "Passed from Execution Stage"))
@@ -361,9 +371,15 @@ class WorkflowOrchestrator:
                 ]
                 if context.review_result:
                     output_data.append(("Approved", str(context.review_result.approved)))
-                    output_data.append(("Quality Score", f"{context.review_result.score:.1f}" if hasattr(context.review_result, "score") else "1.0"))
-                    if hasattr(context.review_result, "issues") and context.review_result.issues:
-                        extra_sections.append(("Validation Issues", [str(i) for i in context.review_result.issues]))
+                    score_val = getattr(context.review_result, "overall_score", 100.0)
+                    output_data.append(("Quality Score", f"{score_val:.1f}"))
+                    if hasattr(context.review_result, "validation_results") and context.review_result.validation_results:
+                        val_items = []
+                        for vr in context.review_result.validation_results:
+                            val_status = "Passed" if vr.passed else "Failed"
+                            val_items.append(f"{vr.item_id} ({vr.item_type}): {val_status}")
+                        if val_items:
+                            extra_sections.append(("Validation Results", val_items))
 
             elif stage == WorkflowStage.SEO_UPDATE:
                 input_data.append(("Repository Path", str(context.repository_path)))
