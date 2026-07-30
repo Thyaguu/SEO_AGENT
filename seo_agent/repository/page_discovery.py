@@ -108,6 +108,23 @@ class PageDiscovery:
                 # Fallback: scan for common patterns
                 pages = self._discover_all_pages(root)
 
+            # Deduplicate pages by normalized url_path and resolved file_path
+            unique_pages: list[DiscoveredPage] = []
+            seen_routes: set[str] = set()
+            seen_files: set[str] = set()
+            for p in pages:
+                norm_route = p.url_path.strip()
+                try:
+                    norm_file = str(Path(p.file_path).resolve())
+                except Exception:
+                    norm_file = p.file_path
+
+                if norm_route not in seen_routes and norm_file not in seen_files:
+                    seen_routes.add(norm_route)
+                    seen_files.add(norm_file)
+                    unique_pages.append(p)
+            pages = unique_pages
+
             self._logger.info(f"pages_discovered: {len(pages)} pages")
             return success(pages)
 

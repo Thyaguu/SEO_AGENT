@@ -277,11 +277,13 @@ class WorkflowOrchestrator:
                     "Identifying project structure...",
                 ]
                 if context.repository_info:
-                    fw_type = context.repository_info.framework.framework_type.value if context.repository_info.framework else "static_html"
-                    output_data.append(("Framework", str(fw_type)))
+                    has_sitemap = "Yes" if (context.repository_info.sitemap and context.repository_info.sitemap.exists) else "No"
+                    has_robots = "Yes" if (context.repository_info.robots and context.repository_info.robots.exists) else "No"
+                    output_data.append(("Sitemap Present", has_sitemap))
+                    output_data.append(("Robots.txt Present", has_robots))
                     if context.repository_info.pages:
                         html_files = [Path(p.file_path).name for p in context.repository_info.pages]
-                        extra_sections.append(("Files Found", html_files))
+                        extra_sections.append(("HTML Files Discovered", html_files))
 
             elif stage == WorkflowStage.FRAMEWORK_DETECTION:
                 input_data.append(("Repository Path", str(context.repository_path)))
