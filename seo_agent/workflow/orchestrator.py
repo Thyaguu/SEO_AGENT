@@ -269,7 +269,7 @@ class WorkflowOrchestrator:
             output_data: list[tuple[str, str]] = []
             extra_sections: list[tuple[str, list[str]]] = []
 
-            if stage == WorkflowStage.REPOSITORY_SCAN:
+            if stage == WorkflowStage.SCANNING:
                 input_data.append(("Repository Path", str(context.repository_path)))
                 processing_steps = [
                     "Scanning repository...",
@@ -377,7 +377,7 @@ class WorkflowOrchestrator:
                 if "robots_path" in context.metadata:
                     output_data.append(("Robots Path", str(context.metadata["robots_path"])))
 
-            elif stage == WorkflowStage.GIT_OPERATIONS:
+            elif stage == WorkflowStage.GIT:
                 input_data.append(("Repository Path", str(context.repository_path)))
                 processing_steps = [
                     "Checking git configuration...",
@@ -395,8 +395,8 @@ class WorkflowOrchestrator:
                 duration_sec=duration_sec,
                 extra_sections=extra_sections if extra_sections else None,
             )
-        except Exception as e:
-            logger.debug(f"Failed to format stage report: {e}")
+        except Exception:
+            logger.exception("Failed to format stage report")
 
     def get_stage_status(
         self,
