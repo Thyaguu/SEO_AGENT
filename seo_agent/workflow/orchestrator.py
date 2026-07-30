@@ -21,9 +21,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Union
 import asyncio
+import time
 import traceback
 
-from seo_agent.core.logging import get_logger, log_stage_banner
+from seo_agent.core.logging import get_logger, log_stage_banner, log_stage_report
 from seo_agent.core.result import Failure, Result, Success
 from seo_agent.models.api import KeywordPayload, SEOPayload
 from seo_agent.models.repository import PageInfo
@@ -197,6 +198,7 @@ class WorkflowOrchestrator:
         stage_info = get_stage_info(stage)
         log_stage_banner(logger, stage_info.name)
         logger.info(f"Executing stage: {stage_info.name}")
+        start_time = time.time()
 
         # Get handler
         handler = self._stage_handlers.get(stage)
@@ -221,9 +223,13 @@ class WorkflowOrchestrator:
             if asyncio.iscoroutine(result):
                 result = await result
 
+            duration = time.time() - start_time
             if result.is_success():
+                self._print_stage_report(context, stage, "SUCCESS", duration)
                 logger.info(f"Stage {stage_info.name} completed successfully")
                 return Success(context)
+
+            self._print_stage_report(context, stage, "FAILED", duration)
 
             # Handle failure
             error = result.get_error_or_none() or "Unknown error"
@@ -245,6 +251,138 @@ class WorkflowOrchestrator:
 
         # Should not reach here
         return Failure("Max retries exceeded")
+
+    def _print_stage_report(
+        self,
+        context: WorkflowContext,
+        stage: WorkflowStage,
+        status: str,
+        duration_sec: float,
+    ) -> None:
+        """Format and print a structured report for the completed stage using runtime information."""
+        try:
+            stage_info = get_stage_info(stage)
+            stage_name = stage_info.name
+
+            input_data: list[tuple[str, str]] = []
+            processing_steps: list[str] = []
+            output_data: list[tuple[str, str]] = []
+            extra_sections: list[tuple[str, list[str]]] = []
+
+            if stage == WorkflowStage.REPOSITORY_SCAN:
+                input_data.append(("Repository Path", str(context.repository_path)))
+                processing_steps = [
+                    "Scanning repository...",
+                    "Detecting supported HTML pages...",
+                    "Identifying project structure...",
+                ]
+                if context.repository_info:
+                    fw = context.framework_info.framework if context.framework_info else "static_html"
+                    output_data.append(("Framework", str(fw)))
+                    html_files = [Path(p.path).name if hasattr(p, "path") else str(p) for p in context.repository_info.html_pages]
+                    if html_files:
+                        extra_sections.append(("Files Found", html_files))
+                    output_data.append(("Total HTML Pages", str(len(context.repository_info.html_pages))))
+
+            elif stage == WorkflowStage.FRAMEWORK_DETECTION:
+                input_data.append(("Repository Path", str(context.repository_path)))
+                processing_steps = [
+                    "Analyzing file structure...",
+                    "Detecting web framework...",
+                    "Identifying routing architecture...",
+                ]
+                if context.framework_info:
+                    output_data.append(("Framework", str(context.framework_info.framework)))
+                    output_data.append(("Routing Type", str(context.framework_info.routing_type)))
+
+            elif stage == WorkflowStage.PAGE_DISCOVERY:
+                input_data.append(("Repository Path", str(context.repository_path)))
+                if context.framework_info:
+                    input_data.append(("Framework", str(context.framework_info.framework)))
+                processing_steps = [
+                    "Discovering static routes...",
+                    "Mapping page paths...",
+                ]
+                output_data.append(("Total Pages Discovered", str(len(context.pages))))
+                if context.pages:
+                    routes = [p.route for p in context.pages]
+                    extra_sections.append(("Discovered Routes", routes))
+
+            elif stage == WorkflowStage.METADATA_EXTRACTION:
+                input_data.append(("Discovered Pages", str(len(context.page_info))))
+                processing_steps = [
+                    "Parsing HTML head tags...",
+                    "Extracting title, description, canonical, OpenGraph, JSON-LD...",
+                ]
+                output_data.append(("Pages Parsed", str(len(context.page_info))))
+
+            elif stage == WorkflowStage.PLANNING:
+                input_data.append(("Repository Path", str(context.repository_path)))
+                if context.keywords:
+                    input_data.append(("Seed Keywords", ", ".join(context.keywords)))
+                processing_steps = [
+                    "Analyzing repository opportunities...",
+                    "Selecting target keywords...",
+                    "Generating multi-phase execution tasks...",
+                ]
+                if context.execution_plan:
+                    output_data.append(("Total Tasks Planned", str(len(context.execution_plan.tasks))))
+                    output_data.append(("Execution Phases", str(len(context.execution_plan.phases))))
+
+            elif stage == WorkflowStage.EXECUTION:
+                input_data.append(("Planned Tasks", str(len(context.execution_plan.tasks)) if context.execution_plan else "0"))
+                processing_steps = [
+                    "Executing task modifications...",
+                    "Invoking OpenCode client...",
+                    "Applying SEO changes...",
+                ]
+                if context.execution_result:
+                    output_data.append(("Executed Tasks", str(len(context.execution_result.executed_tasks))))
+                    output_data.append(("Files Modified", str(len(context.execution_result.files_modified))))
+
+            elif stage == WorkflowStage.REVIEW:
+                input_data.append(("Execution Results", "Passed from Execution Stage"))
+                processing_steps = [
+                    "Validating HTML rules...",
+                    "Checking title & meta description lengths...",
+                    "Verifying h1 hierarchy...",
+                ]
+                if context.review_result:
+                    output_data.append(("Approved", str(context.review_result.approved)))
+                    output_data.append(("Quality Score", f"{context.review_result.score:.1f}" if hasattr(context.review_result, "score") else "1.0"))
+
+            elif stage == WorkflowStage.SEO_UPDATE:
+                input_data.append(("Repository Path", str(context.repository_path)))
+                processing_steps = [
+                    "Applying approved changes...",
+                    "Generating sitemap.xml...",
+                    "Generating robots.txt...",
+                ]
+                if "sitemap_path" in context.metadata:
+                    output_data.append(("Sitemap Path", str(context.metadata["sitemap_path"])))
+                if "robots_path" in context.metadata:
+                    output_data.append(("Robots Path", str(context.metadata["robots_path"])))
+
+            elif stage == WorkflowStage.GIT_OPERATIONS:
+                input_data.append(("Repository Path", str(context.repository_path)))
+                processing_steps = [
+                    "Checking git configuration...",
+                    "Performing version control operations...",
+                ]
+                output_data.append(("Git Status", "Skipped per context configuration" if context.config.get("skip_git") else "Completed"))
+
+            log_stage_report(
+                logger=logger,
+                stage_name=stage_name,
+                input_data=input_data,
+                processing_steps=processing_steps,
+                output_data=output_data,
+                status=status,
+                duration_sec=duration_sec,
+                extra_sections=extra_sections if extra_sections else None,
+            )
+        except Exception as e:
+            logger.debug(f"Failed to format stage report: {e}")
 
     def get_stage_status(
         self,

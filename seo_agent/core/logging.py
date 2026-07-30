@@ -156,3 +156,78 @@ def log_stage_banner(
     banner_line = char * width
     centered_title = title.strip().upper().center(width)
     logger.info(f"\n{banner_line}\n\n{centered_title}\n\n{banner_line}\n")
+
+
+def log_stage_report(
+    logger: logging.Logger,
+    stage_name: str,
+    input_data: list[tuple[str, str]],
+    processing_steps: list[str],
+    output_data: list[tuple[str, str]],
+    status: str,
+    duration_sec: float,
+    extra_sections: list[tuple[str, list[str]]] | None = None,
+) -> None:
+    """Format and log a structured report for a workflow stage.
+
+    Args:
+        logger: Logger instance to output the report.
+        stage_name: Name of the stage.
+        input_data: Key-value pairs describing input.
+        processing_steps: List of processing steps performed.
+        output_data: Key-value pairs describing output.
+        status: Stage status string ("SUCCESS", "FAILED", "SKIPPED").
+        duration_sec: Duration in seconds.
+        extra_sections: Additional custom sections (Title, List of lines).
+    """
+    lines = []
+    lines.append("====================================================")
+    lines.append(f"Stage: {stage_name}")
+    lines.append("====================================================")
+    lines.append("")
+
+    if input_data:
+        lines.append("Input")
+        lines.append("-----")
+        for label, val in input_data:
+            lines.append(f"{label}")
+            lines.append(f"{val}")
+        lines.append("")
+
+    if processing_steps:
+        lines.append("Processing")
+        lines.append("----------")
+        for step in processing_steps:
+            lines.append(f"{step}")
+        lines.append("")
+
+    if output_data:
+        lines.append("Output")
+        lines.append("------")
+        for label, val in output_data:
+            lines.append(f"{label}")
+            lines.append(f"{val}")
+        lines.append("")
+
+    if extra_sections:
+        for title, items in extra_sections:
+            lines.append(f"{title}")
+            lines.append("-" * len(title))
+            for item in items:
+                lines.append(f"{item}")
+            lines.append("")
+
+    lines.append("Status")
+    lines.append("------")
+    lines.append(f"{status}")
+    lines.append("")
+
+    lines.append("Duration")
+    lines.append("--------")
+    lines.append(f"{duration_sec:.2f} seconds")
+    lines.append("")
+
+    lines.append("----------------------------------------------------")
+
+    report_text = "\n".join(lines)
+    logger.info(f"\n{report_text}\n")
