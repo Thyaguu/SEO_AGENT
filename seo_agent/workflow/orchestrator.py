@@ -1164,7 +1164,7 @@ def _create_seo_update_handler(
     async def handler(context: WorkflowContext) -> Result[WorkflowContext, str]:
         try:
             exec_res = context.execution_result
-            latest_review = context.get_latest_review_result()
+            latest_review = getattr(context, "review_result", None)
 
             if (not exec_res or not exec_res.success or exec_res.failed_tasks > 0) and not context.config.get("allow_partial_execution", False):
                 logger.warning("SEO Update skipped due to execution failure")

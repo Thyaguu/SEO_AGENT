@@ -223,9 +223,30 @@ class WorkflowContext:
         """Check if workflow completed successfully.
 
         Returns:
-            True if in COMPLETED stage with no errors.
+            True if in COMPLETED stage with no errors and no failed execution tasks.
         """
-        return self.stage == WorkflowStage.COMPLETED and not self.has_errors()
+        if self.stage != WorkflowStage.COMPLETED or self.has_errors():
+            return False
+        if self.execution_result and (not self.execution_result.success or self.execution_result.failed_tasks > 0):
+            return False
+        return True
+
+    def get_workflow_status(self) -> str:
+        """Calculate overall workflow status ("SUCCESS", "PARTIAL SUCCESS", "FAILED")."""
+        if self.stage == WorkflowStage.FAILED or (self.has_errors() and not (self.execution_result and self.execution_result.completed_tasks > 0)):
+            return "FAILED"
+        if self.execution_result:
+            if not self.execution_result.success or self.execution_result.failed_tasks > 0:
+                if self.execution_result.completed_tasks > 0:
+                    return "PARTIAL SUCCESS"
+                return "FAILED"
+        if self.stage == WorkflowStage.COMPLETED:
+            return "SUCCESS"
+        return "IN PROGRESS"
+
+    def get_latest_review_result(self) -> Any | None:
+        """Get the latest review result."""
+        return self.review_result
 
     def set_repository_info(self, info: RepositoryInfo) -> None:
         """Set repository information.
