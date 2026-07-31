@@ -629,12 +629,16 @@ class TaskPlanner:
         # Check for AI Page-Keyword assignment match
         assignment_match = None
         if matching_result and getattr(matching_result, "assignments", None):
-            clean_target = str(resolved_file).lower().strip("/")
-            target_base = Path(clean_target).name
+            def norm(p: str) -> tuple[str, str]:
+                c = str(p).lower().strip("/")
+                if not c or c in ("index", "index.html"):
+                    return ("index.html", "index")
+                return (c, Path(c).stem)
+
+            target_norm, target_stem = norm(resolved_file)
             for ass in matching_result.assignments:
-                p_route = str(ass.page_route).lower().strip("/")
-                p_base = Path(p_route).name
-                if clean_target == p_route or target_base == p_base or clean_target.endswith(p_route) or p_route.endswith(clean_target):
+                p_norm, p_stem = norm(ass.page_route)
+                if target_norm == p_norm or target_stem == p_stem:
                     assignment_match = ass
                     break
 

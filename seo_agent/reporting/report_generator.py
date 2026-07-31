@@ -301,6 +301,7 @@ class ReportGenerator:
         ]
 
         # 8. Execution Summary
+        exec_res = context.execution_result
         t_failed = getattr(exec_res, "failed_tasks", 0) if exec_res else 0
         fail_reasons = []
         failed_task_id = "N/A"
