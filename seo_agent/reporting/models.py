@@ -152,10 +152,20 @@ class TimelineItem:
 
 
 @dataclass
+class SEOInputSummaryData:
+    input_source: str  # "CSV", "JSON", "None"
+    records_loaded: int = 0
+    matched_pages: int = 0
+    unmatched_records: int = 0
+    skipped_records: int = 0
+
+
+@dataclass
 class ExecutionIntelligenceReportModel:
     executive_summary: ExecutiveSummaryData
     repository_analysis: RepositoryAnalysisData
     ai_understanding: AIUnderstandingData
+    seo_input_summary: SEOInputSummaryData | None = None
     planning_decisions: list[PlanningDecisionData] = field(default_factory=list)
     file_changes: list[FileChangeData] = field(default_factory=list)
     before_after_comparisons: list[PageComparisonData] = field(default_factory=list)

@@ -22,6 +22,7 @@ from seo_agent.models.repository import (
     RepositoryInfo,
 )
 from seo_agent.models.review import ReviewResult
+from seo_agent.models.seo_input import NormalizedSEOEntry, SEOInputCollection
 from seo_agent.models.task import ExecutionPlan, ExecutionResult
 from seo_agent.workflow.stages import StageTransition, WorkflowStage
 
@@ -83,6 +84,9 @@ class WorkflowContext:
     # Keywords for SEO
     keywords: list[str] = field(default_factory=list)
 
+    # External SEO Input Data (CSV / JSON)
+    seo_input: SEOInputCollection | None = None
+
     # Checkpointing
     checkpoints: list[WorkflowCheckpoint] = field(default_factory=list)
 
@@ -92,6 +96,35 @@ class WorkflowContext:
     # Configuration and metadata
     config: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    def get_seo_entry_for_page(self, route_or_path: str) -> NormalizedSEOEntry | None:
+        """Find a matching normalized SEO entry for a given route or file path.
+
+        Matches by exact route, URL path, file name, or page path stem.
+        """
+        if not self.seo_input or not self.seo_input.records:
+            return None
+
+        clean_target = str(route_or_path).lower().strip("/")
+        target_basename = Path(clean_target).name
+
+        for entry in self.seo_input.records:
+            candidates = [
+                entry.page_path,
+                entry.url,
+            ]
+            for cand in candidates:
+                if not cand:
+                    continue
+                clean_cand = str(cand).lower().strip("/")
+                cand_basename = Path(clean_cand).name
+
+                if clean_target == clean_cand or target_basename == cand_basename:
+                    return entry
+                if clean_target.endswith(clean_cand) or clean_cand.endswith(clean_target):
+                    return entry
+
+        return None
 
     def update_stage(self, new_stage: WorkflowStage) -> None:
         """Update the current stage.

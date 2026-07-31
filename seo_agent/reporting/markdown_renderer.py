@@ -52,6 +52,15 @@ class MarkdownRenderer:
         lines.append(f"- **Existing Sitemap Present:** {'Yes' if s2.has_sitemap else 'No'}")
         lines.append(f"- **Existing Robots.txt Present:** {'Yes' if s2.has_robots else 'No'}")
         lines.append(f"- **Repository Health Score:** {s2.health_score}/100")
+        if report.seo_input_summary:
+            si = report.seo_input_summary
+            lines.append("")
+            lines.append("### External SEO Input Data")
+            lines.append(f"- **Input Source:** `{si.input_source}`")
+            lines.append(f"- **SEO Records Loaded:** {si.records_loaded}")
+            lines.append(f"- **Matched Pages:** {si.matched_pages}")
+            lines.append(f"- **Unmatched Records:** {si.unmatched_records}")
+            lines.append(f"- **Skipped Records:** {si.skipped_records}")
         lines.append("")
 
         # Section 3: AI Understanding

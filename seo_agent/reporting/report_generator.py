@@ -27,6 +27,7 @@ from seo_agent.reporting.models import (
     PlanningDecisionData,
     RepositoryAnalysisData,
     ReviewSummaryData,
+    SEOInputSummaryData,
     TimelineItem,
 )
 
@@ -388,10 +389,22 @@ class ReportGenerator:
             f"Technical assets (sitemap.xml and robots.txt) were successfully verified on disk."
         )
 
+        # Construct SEO Input summary if present
+        seo_input_sum = None
+        if context.seo_input:
+            seo_input_sum = SEOInputSummaryData(
+                input_source=context.seo_input.source_type.upper(),
+                records_loaded=context.seo_input.records_loaded,
+                matched_pages=context.seo_input.matched_pages,
+                unmatched_records=context.seo_input.unmatched_records,
+                skipped_records=context.seo_input.skipped_records,
+            )
+
         return ExecutionIntelligenceReportModel(
             executive_summary=exec_sum,
             repository_analysis=repo_analysis,
             ai_understanding=ai_understanding,
+            seo_input_summary=seo_input_sum,
             planning_decisions=planning_decisions,
             file_changes=file_changes,
             before_after_comparisons=before_after_comparisons,

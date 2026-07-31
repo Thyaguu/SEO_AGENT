@@ -137,6 +137,8 @@ class SEOAgentRequest(BaseModel):
     request_id: str = Field(..., description="Unique request identifier")
     repository_path: str = Field(..., description="Absolute path to repository")
     seo_payload: SEOPayload = Field(..., description="SEO intelligence from n8n")
+    csv_path: str | None = Field(default=None, description="Optional path to CSV input file")
+    csv_content: str | None = Field(default=None, description="Optional raw CSV content string")
     skip_git: bool = Field(default=False, description="Skip Git operations")
     skip_pipeline: bool = Field(default=False, description="Skip CI/CD pipeline")
     max_seo_pages: int = Field(default=10, ge=1, le=50)

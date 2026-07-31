@@ -232,6 +232,14 @@ class SEOAgentRequest(BaseModel):
         ...,
         description="Complete SEO intelligence from n8n",
     )
+    csv_path: str | None = Field(
+        default=None,
+        description="Optional path to CSV input file",
+    )
+    csv_content: str | None = Field(
+        default=None,
+        description="Optional raw CSV content string",
+    )
     skip_git: bool = Field(
         default=False,
         description="Skip Git operations if True",

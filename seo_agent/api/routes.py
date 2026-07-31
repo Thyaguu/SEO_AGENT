@@ -74,6 +74,10 @@ def _request_to_context(request: SEOAgentRequest) -> WorkflowContext:
     context.config["max_seo_pages"] = request.max_seo_pages
     context.config["review_attempts"] = request.review_attempts
     context.config["branch_name"] = request.branch_name
+    if getattr(request, "csv_path", None):
+        context.config["csv_path"] = request.csv_path
+    if getattr(request, "csv_content", None):
+        context.config["csv_content"] = request.csv_content
 
     # Extract keywords from SEO payload
     if request.seo_payload.seed_keywords:

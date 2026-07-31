@@ -30,6 +30,7 @@ from seo_agent.models.api import KeywordPayload, SEOPayload
 from seo_agent.models.repository import PageInfo
 from seo_agent.models.seo import SEOPage
 from seo_agent.agents.planning.planner import PlanningInput
+from seo_agent.inputs import CSVSEOInputReader, JSONSEOInputReader
 from seo_agent.workflow.context import WorkflowContext
 from seo_agent.workflow.stages import (
     WorkflowStage,
@@ -155,6 +156,9 @@ class WorkflowOrchestrator:
             f"Starting workflow for repository: {context.repository_path}"
         )
 
+        # Process initial SEO input (CSV / JSON) during workflow initialization
+        self._process_initial_seo_input(context)
+
         # Execute stages in order
         for stage in get_stage_order():
             if context.is_complete():
@@ -251,6 +255,44 @@ class WorkflowOrchestrator:
 
         # Should not reach here
         return Failure("Max retries exceeded")
+
+    def _process_initial_seo_input(self, context: WorkflowContext) -> None:
+        """Parse and normalize CSV/JSON input files during context initialization."""
+        if context.seo_input is not None:
+            return
+
+        csv_path = context.config.get("csv_path") or context.config.get("seo_input_path") or context.metadata.get("csv_path")
+        csv_content = context.config.get("csv_content") or context.metadata.get("csv_content")
+        json_path = context.config.get("json_path") or context.metadata.get("json_path")
+
+        # Search default filenames in repo root if not explicitly provided
+        if not csv_path and not csv_content and not json_path:
+            repo_root = Path(context.repository_path)
+            if repo_root.exists():
+                for default_name in ("seo_input.csv", "seo.csv", "keywords.csv"):
+                    candidate = repo_root / default_name
+                    if candidate.exists() and candidate.is_file():
+                        csv_path = str(candidate)
+                        break
+
+        if csv_path or csv_content:
+            reader = CSVSEOInputReader()
+            source = csv_path or csv_content
+            res = reader.read(source)
+            if res.is_success():
+                context.seo_input = res.get_or_none()
+                logger.info(f"Loaded {context.seo_input.records_loaded} SEO record(s) from CSV input")
+            else:
+                logger.warning(f"Failed to read CSV input: {res.get_error_or_none()}")
+
+        elif json_path:
+            reader = JSONSEOInputReader()
+            res = reader.read(json_path)
+            if res.is_success():
+                context.seo_input = res.get_or_none()
+                logger.info(f"Loaded {context.seo_input.records_loaded} SEO record(s) from JSON input")
+            else:
+                logger.warning(f"Failed to read JSON input: {res.get_error_or_none()}")
 
     def _print_stage_report(
         self,
@@ -708,12 +750,56 @@ def _create_metadata_extraction_handler(
     return handler
 
 
+def _match_seo_input_records(context: WorkflowContext) -> None:
+    """Perform matching between context.seo_input records and discovered pages."""
+    if not context.seo_input or not context.seo_input.records:
+        return
+
+    all_pages = context.page_info if context.page_info else context.pages
+    if not all_pages:
+        context.seo_input.unmatched_records = len(context.seo_input.records)
+        return
+
+    matched_records_set: set[int] = set()
+    matched_pages_set: set[str] = set()
+
+    for rec_idx, record in enumerate(context.seo_input.records):
+        rec_path = record.page_path or record.url
+        if not rec_path:
+            continue
+
+        clean_rec = str(rec_path).lower().strip("/")
+        rec_base = Path(clean_rec).name
+
+        for p in all_pages:
+            p_route = getattr(p, "route", getattr(p, "url_path", getattr(p, "file_path", "")))
+            clean_p = str(p_route).lower().strip("/")
+            p_base = Path(clean_p).name
+
+            if clean_rec == clean_p or rec_base == p_base or clean_p.endswith(clean_rec) or clean_rec.endswith(clean_p):
+                matched_records_set.add(rec_idx)
+                matched_pages_set.add(clean_p)
+                break
+
+    context.seo_input.matched_pages = len(matched_pages_set)
+    context.seo_input.unmatched_records = len(context.seo_input.records) - len(matched_records_set)
+    logger.info(
+        f"SEO Input Record Matching: Loaded={context.seo_input.records_loaded}, "
+        f"Matched Pages={context.seo_input.matched_pages}, "
+        f"Unmatched Records={context.seo_input.unmatched_records}, "
+        f"Skipped Records={context.seo_input.skipped_records}"
+    )
+
+
 def _create_planning_handler(
     planning_agent: Any,
 ) -> StageHandler:
     """Create handler for PLANNING stage."""
     def handler(context: WorkflowContext) -> Result[WorkflowContext, str]:
         try:
+            # Match CSV/JSON SEO input records against discovered pages
+            _match_seo_input_records(context)
+
             # Convert keyword strings to KeywordPayload instances
             seed_keywords = [
                 KeywordPayload(term=kw) for kw in context.keywords
