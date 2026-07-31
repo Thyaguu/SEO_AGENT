@@ -247,12 +247,22 @@ class WorkflowOrchestrator:
             reason = "Transient Error"
             exc_type = "Runtime Exception"
 
-            for non_ret_exc in ("NameError", "AttributeError", "ImportError", "TypeError", "ValueError", "AssertionError", "SyntaxError", "KeyError"):
-                if non_ret_exc in error:
+            non_retryable_terms = (
+                "AttributeError", "NameError", "ImportError", "TypeError", "ValueError",
+                "AssertionError", "SyntaxError", "KeyError", "IndexError",
+                "has no attribute", "not defined", "cannot import", "missing 1 required",
+                "unexpected keyword argument", "unsupported operand", "object is not callable",
+                "rejected review", "Rejected review", "Validation failed", "validation failed",
+                "Planning validation failed", "Missing approval", "skipped due to rejected review",
+                "skipped due to execution task failures"
+            )
+
+            for term in non_retryable_terms:
+                if term in error:
                     is_retryable = False
                     classification = "NON-RETRYABLE"
-                    reason = "Programming Error"
-                    exc_type = non_ret_exc
+                    reason = "Programming Error" if any(p in error for p in ("Error", "attribute", "defined", "import", "operand", "callable", "argument")) else "Business Logic Failure"
+                    exc_type = term if term in ("AttributeError", "NameError", "ImportError", "TypeError", "ValueError", "AssertionError", "SyntaxError", "KeyError") else "Logic Exception"
                     break
 
             if not is_retryable:
@@ -1164,16 +1174,26 @@ def _create_seo_update_handler(
     async def handler(context: WorkflowContext) -> Result[WorkflowContext, str]:
         try:
             exec_res = context.execution_result
-            latest_review = getattr(context, "review_result", None)
+            latest_review = context.get_latest_review_result()
 
             if (not exec_res or not exec_res.success or exec_res.failed_tasks > 0) and not context.config.get("allow_partial_execution", False):
                 logger.warning("SEO Update skipped due to execution failure")
                 return Failure("SEO Update stage skipped due to execution task failures")
 
-            from seo_agent.models.review import ReviewDecision
-            if latest_review and getattr(latest_review, "decision", None) != ReviewDecision.APPROVED and not context.config.get("allow_partial_execution", False):
-                logger.warning("SEO Update skipped due to rejected review")
-                return Failure("SEO Update stage skipped due to rejected review")
+            if latest_review:
+                is_approved = False
+                if hasattr(latest_review, "is_approved") and latest_review.is_approved:
+                    is_approved = True
+                elif hasattr(latest_review, "is_valid") and latest_review.is_valid:
+                    is_approved = True
+                else:
+                    dec_val = getattr(getattr(latest_review, "decision", None), "value", getattr(latest_review, "decision", None))
+                    if str(dec_val).lower() in ("approved", "approved_with_warnings"):
+                        is_approved = True
+
+                if not is_approved and not context.config.get("allow_partial_execution", False):
+                    logger.warning("SEO Update skipped due to rejected review")
+                    return Failure("SEO Update stage skipped due to rejected review")
 
             # Apply approved file changes (metadata updates, code edits, page generations) to disk
             from seo_agent.seo.applier import ApprovedChangesApplier

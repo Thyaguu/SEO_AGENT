@@ -515,10 +515,16 @@ class TaskPlanner:
             # Build input_data in the schema the executor expects
             input_data = self._build_input_data(template, repository_path, seo_input=seo_input, matching_result=matching_result)
 
+            desc = template.description
+            if "primary_keyword" in input_data:
+                target_file = input_data.get("target_files", [resolved_file if 'resolved_file' in locals() else ""])[0]
+                sec_kws = input_data.get("secondary_keywords", [])
+                desc = f"Phase 1: Optimize {target_file} for primary keyword '{input_data['primary_keyword']}' and secondary keywords [{', '.join(sec_kws)}]"
+
             task = Task(
                 task_id=f"task-{task_id:04d}",
                 task_type=template.task_type,
-                description=template.description,
+                description=desc,
                 status=TaskStatus.PENDING,
                 priority=template.priority,
                 dependencies=tuple(),
@@ -634,21 +640,23 @@ class TaskPlanner:
 
         if assignment_match:
             prim = assignment_match.primary_keyword
-            sec1 = assignment_match.secondary_keywords[0]
-            sec2 = assignment_match.secondary_keywords[1]
+            sec_kw_objs = assignment_match.secondary_keywords or []
+            sec_kw_terms = [s.keyword for s in sec_kw_objs]
+            sec1_term = sec_kw_terms[0] if len(sec_kw_terms) > 0 else prim.keyword
+            sec2_term = sec_kw_terms[1] if len(sec_kw_terms) > 1 else sec1_term
 
             base["primary_keyword"] = prim.keyword
-            base["secondary_keywords"] = [sec1.keyword, sec2.keyword]
+            base["secondary_keywords"] = sec_kw_terms
             base["confidence_score"] = assignment_match.confidence_score
             base["ai_reasoning"] = assignment_match.ai_reasoning
 
-            title_val = prim.meta_title or f"{prim.keyword} | {sec1.keyword} Solutions"
-            desc_val = prim.meta_description or f"Leading {prim.keyword} services. Specialized in {sec1.keyword} and {sec2.keyword}."
-            h2_val = prim.h2_outlines or [sec1.keyword, sec2.keyword, "Key Benefits & Features"]
+            title_val = prim.meta_title or f"{prim.keyword} | {sec1_term} Solutions"
+            desc_val = prim.meta_description or f"Leading {prim.keyword} services. Specialized in {sec1_term} and {sec2_term}."
+            h2_val = prim.h2_outlines or ([sec1_term, sec2_term, "Key Benefits & Features"] if sec_kw_terms else ["Overview", "Key Features"])
 
             base["target_metadata"] = {
                 "primary_keyword": prim.keyword,
-                "secondary_keywords": [sec1.keyword, sec2.keyword],
+                "secondary_keywords": sec_kw_terms,
                 "title": title_val,
                 "description": desc_val,
                 "h1": prim.keyword,
@@ -661,12 +669,13 @@ class TaskPlanner:
                 "internal_links": prim.lsi_keywords,
             }
 
+            sec_kws_str = ", ".join(f'"{kw}"' for kw in sec_kw_terms)
             base["instructions"] = (
                 f"Update the SEO metadata in the HTML file '{resolved_file}' (located at '{abs_file_path}') "
                 f"using the AI Page-Keyword Semantic Matching assignments:\n"
                 f"- Target Page: {resolved_file}\n"
                 f"- Primary Keyword: \"{prim.keyword}\"\n"
-                f"- Secondary Keywords: [\"{sec1.keyword}\", \"{sec2.keyword}\"]\n"
+                f"- Secondary Keywords: [{sec_kws_str}]\n"
                 f"- Confidence Score: {int(assignment_match.confidence_score * 100)}%\n"
                 f"- Assignment Reasoning: {assignment_match.ai_reasoning}\n"
                 f"- Title Tag: \"{title_val}\"\n"
@@ -676,7 +685,7 @@ class TaskPlanner:
                 f"- Canonical URL: \"{prim.canonical or ''}\"\n"
                 f"- Social Metadata: OpenGraph (og:title, og:description) & Twitter Cards\n"
                 f"- Structured Data Schema: Organization / Product Schema\n"
-                f"- Image Alt Tags: Optimized for '{prim.keyword}' and '{sec1.keyword}'"
+                f"- Image Alt Tags: Optimized for '{prim.keyword}' and '{sec1_term}'"
             )
             return base
 
