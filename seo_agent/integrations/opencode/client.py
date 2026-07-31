@@ -57,7 +57,7 @@ class OpenCodeClient:
         self,
         base_url: str,
         api_key: str,
-        timeout: int = 60,
+        timeout: int = 15,
         default_model: str = "claude-3-5-sonnet-20241022",
     ) -> None:
         """Initialize the OpenCode client.

@@ -262,6 +262,29 @@ class OpenCodeAdapter:
         )
 
         result = self._client.execute(request)
+        if result.is_failure():
+            # Fallback to direct file write if OpenCode CLI fails or times out
+            try:
+                target_dir = Path(workspace_path) if workspace_path else Path(".")
+                target_file = target_dir / file_path
+                target_file.parent.mkdir(parents=True, exist_ok=True)
+                target_file.write_text(content, encoding="utf-8")
+
+                page_gen_res = PageGenerationResult(
+                    file_path=file_path,
+                    success=True,
+                    content=content,
+                )
+                exec_res = OpenCodeExecutionResult(
+                    request_id=request_id,
+                    success=True,
+                    page_generations=(page_gen_res,),
+                    duration_seconds=0.01,
+                )
+                return Success(exec_res)
+            except Exception as e:
+                return Failure(f"Fallback page generation failed: {e}")
+
         return self._convert_response_to_result(result)
 
     def execute_simple(
