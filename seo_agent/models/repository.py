@@ -295,7 +295,7 @@ class RepositoryScanOptions:
     include_hidden: bool = False
     max_depth: int | None = None
     extensions: tuple[str, ...] = field(default_factory=tuple)
-    exclude_patterns: tuple[str, ...] = field(default_factory=lambda: ("node_modules", ".git", "__pycache__"))
+    exclude_patterns: tuple[str, ...] = field(default_factory=lambda: ("node_modules", ".git", "__pycache__", "reports"))
     follow_symlinks: bool = False
 
 

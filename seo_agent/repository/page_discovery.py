@@ -654,6 +654,11 @@ class PageDiscovery:
         Returns:
             True if file appears to be a page.
         """
+        # Skip ignored directories (e.g. generated reports/, node_modules/, build artifact folders)
+        ignored_dirs = ("reports", "node_modules", ".git", ".github", "dist", ".next", "out", "build", ".venv", "venv", "coverage")
+        if any(ignored in file_path.parts for ignored in ignored_dirs):
+            return False
+
         # Skip common non-page files
         skip_patterns = (
             "_app",
