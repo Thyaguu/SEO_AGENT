@@ -94,12 +94,23 @@ class MarkdownRenderer:
         lines.append("## 6. Before vs After Comparisons")
         lines.append("")
         for page_comp in report.before_after_comparisons:
-            lines.append(f"### Page: `{page_comp.file_name}` (`{page_comp.route}`)")
-            lines.append("| Attribute | Before | After |")
-            lines.append("|---|---|---|")
-            for item in page_comp.comparisons:
-                lines.append(f"| **{item.field_name}** | {item.before} | {item.after} |")
+            lines.append(f"### `{page_comp.file_name}` (`{page_comp.route}`)")
             lines.append("")
+            for item in page_comp.comparisons:
+                lines.append(f"#### {item.field_name}")
+                lines.append("")
+                lines.append("**Before**")
+                lines.append("")
+                lines.append(item.before)
+                lines.append("")
+                lines.append("↓")
+                lines.append("")
+                lines.append("**After**")
+                lines.append("")
+                lines.append(item.after)
+                lines.append("")
+                lines.append("---")
+                lines.append("")
 
         # Section 7: AI Reasoning
         lines.append("## 7. AI Reasoning & Decisions")

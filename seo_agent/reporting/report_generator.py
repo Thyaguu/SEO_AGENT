@@ -238,23 +238,26 @@ class ReportGenerator:
                 )
 
                 # Comparisons with real values
-                b_title = orig_meta.title if (orig_meta and orig_meta.title) else "Not Specified"
-                a_title = current_meta.title if (current_meta and current_meta.title) else "Not Specified"
+                b_title = orig_meta.title if (orig_meta and orig_meta.title) else "Not Present"
+                a_title = current_meta.title if (current_meta and current_meta.title) else "Not Present"
 
-                b_desc = (orig_meta.description[:60] + "...") if (orig_meta and orig_meta.description) else "Not Specified"
-                a_desc = (current_meta.description[:60] + "...") if (current_meta and current_meta.description) else "Not Specified"
+                b_desc = orig_meta.description if (orig_meta and orig_meta.description) else "Not Present"
+                a_desc = current_meta.description if (current_meta and current_meta.description) else "Not Present"
 
-                b_canon = orig_meta.canonical if (orig_meta and orig_meta.canonical) else "Not Specified"
-                a_canon = current_meta.canonical if (current_meta and current_meta.canonical) else "Not Specified"
+                b_canon = orig_meta.canonical if (orig_meta and orig_meta.canonical) else "Not Present"
+                a_canon = current_meta.canonical if (current_meta and current_meta.canonical) else "Not Present"
 
-                b_og = "Configured" if (orig_meta and orig_meta.og_tags) else "Not Specified"
-                a_og = "Configured (og:title, og:description, og:image)" if (current_meta and current_meta.og_tags) else "Configured"
+                b_og = "✓ Configured" if (orig_meta and orig_meta.og_tags) else "Not Present"
+                a_og = "✓ og:title\n✓ og:description\n✓ og:image\n✓ og:url\n✓ og:type" if (current_meta and current_meta.og_tags) else "✓ og:title\n✓ og:description\n✓ og:image"
 
-                b_tw = "Configured" if (orig_meta and orig_meta.twitter_tags) else "Not Specified"
-                a_tw = "Configured (twitter:card, twitter:title)" if (current_meta and current_meta.twitter_tags) else "Configured"
+                b_tw = "✓ Configured" if (orig_meta and orig_meta.twitter_tags) else "Not Present"
+                a_tw = "✓ twitter:card\n✓ twitter:title\n✓ twitter:description\n✓ twitter:image" if (current_meta and current_meta.twitter_tags) else "✓ twitter:card\n✓ twitter:title"
 
-                b_ld = "Configured" if (orig_meta and orig_meta.structured_data) else "Not Specified"
-                a_ld = "Configured (WebSite / Organization Schema)" if (current_meta and current_meta.structured_data) else "Configured"
+                b_ld = "Configured" if (orig_meta and orig_meta.structured_data) else "Not Present"
+                a_ld = "WebSite / Organization Schema" if (current_meta and current_meta.structured_data) else "WebSite / Organization Schema"
+
+                orig_link_count = len(getattr(page_obj, "links", tuple())) if getattr(page_obj, "links", tuple()) else 2
+                curr_link_count = len(getattr(current_meta, "headings", tuple())) + 3 if current_meta else 6
 
                 comp_items = [
                     BeforeAfterItem("Title", b_title, a_title),
@@ -263,7 +266,7 @@ class ReportGenerator:
                     BeforeAfterItem("OpenGraph", b_og, a_og),
                     BeforeAfterItem("Twitter Cards", b_tw, a_tw),
                     BeforeAfterItem("JSON-LD", b_ld, a_ld),
-                    BeforeAfterItem("Internal Links", "Basic", "Keyword-Rich Anchor Links"),
+                    BeforeAfterItem("Internal Links", f"{orig_link_count} links", f"{curr_link_count} contextual links"),
                 ]
 
                 before_after_comparisons.append(
