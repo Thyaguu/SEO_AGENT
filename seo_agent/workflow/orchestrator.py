@@ -172,18 +172,21 @@ class WorkflowOrchestrator:
         # Mark workflow completed if all stages succeeded
         context.update_stage(WorkflowStage.COMPLETED)
 
-        # Check final state
-        if context.is_successful():
-            log_stage_banner(logger, "Workflow Completed")
+        # Check final state using get_workflow_status()
+        wf_status = context.get_workflow_status()
+        if wf_status == "SUCCESS":
+            log_stage_banner(logger, "WORKFLOW COMPLETED SUCCESSFULLY")
             logger.info("Workflow completed successfully")
             return Success(context)
-        elif context.has_errors():
-            error_summary = context.get_error_summary()
-            logger.error(f"Workflow failed: {error_summary}")
-            return Failure(error_summary or "Workflow failed")
+        elif wf_status == "PARTIAL SUCCESS":
+            log_stage_banner(logger, "WORKFLOW COMPLETED WITH PARTIAL SUCCESS")
+            logger.info("Workflow completed with partial success (some non-critical tasks skipped/failed)")
+            return Success(context)
         else:
-            logger.warning("Workflow ended in unexpected state")
-            return Failure("Workflow ended in unexpected state")
+            error_summary = context.get_error_summary()
+            log_stage_banner(logger, "WORKFLOW FAILED")
+            logger.error(f"Workflow failed: {error_summary or 'Execution task failures'}")
+            return Failure(error_summary or "Workflow failed due to task failures")
 
     async def _execute_stage(
         self,
@@ -235,13 +238,39 @@ class WorkflowOrchestrator:
 
             self._print_stage_report(context, stage, "FAILED", duration)
 
-            # Handle failure
+            # Handle failure with Smart Retry Policy
             error = result.get_error_or_none() or "Unknown error"
+
+            # Failure classification
+            is_retryable = True
+            classification = "RETRYABLE"
+            reason = "Transient Error"
+            exc_type = "Runtime Exception"
+
+            for non_ret_exc in ("NameError", "AttributeError", "ImportError", "TypeError", "ValueError", "AssertionError", "SyntaxError", "KeyError"):
+                if non_ret_exc in error:
+                    is_retryable = False
+                    classification = "NON-RETRYABLE"
+                    reason = "Programming Error"
+                    exc_type = non_ret_exc
+                    break
+
+            if not is_retryable:
+                logger.error(
+                    f"Stage {stage_info.name} failed\n"
+                    f"Classification:\n{classification}\n"
+                    f"Reason:\n{reason}\n"
+                    f"Exception:\n{exc_type}\n"
+                    f"Retry:\nNO"
+                )
+                context.record_failure(error)
+                return Failure(error)
+
             retry_count += 1
 
             if retry_count <= max_retries:
                 logger.warning(
-                    f"Stage {stage_info.name} failed (attempt {retry_count}/"
+                    f"Stage {stage_info.name} transient failure (attempt {retry_count}/"
                     f"{max_retries + 1}): {error}"
                 )
                 self._retry_counts[stage] = retry_count
@@ -919,7 +948,13 @@ def _create_execution_handler(
 
             result = execution_agent.execute(context.execution_plan)
             if result.is_success():
-                context.set_execution_result(result.get_or_none())
+                exec_res = result.get_or_none()
+                context.set_execution_result(exec_res)
+                if not exec_res.success or exec_res.failed_tasks > 0:
+                    err_msg = f"Execution failed: {exec_res.failed_tasks} task(s) failed out of {exec_res.total_tasks}."
+                    logger.error(err_msg)
+                    context.add_error(err_msg)
+                    return Failure(err_msg)
                 return Success(context)
             return result
         except Exception as e:
@@ -1041,6 +1076,21 @@ def _create_review_handler(
                 session = ExecutionSession()
                 context.metadata["execution_session"] = session
 
+            # Validate execution result status first
+            exec_res = context.execution_result
+            if not exec_res or not exec_res.success or exec_res.failed_tasks > 0:
+                logger.warning("Execution failed or incomplete — rejecting Review validation")
+                from seo_agent.models.review import ReviewDecision, ReviewResult
+                rej_result = ReviewResult(
+                    request_id=context.metadata.get("request_id", ""),
+                    attempt_number=1,
+                    decision=ReviewDecision.REJECTED,
+                    score=0.0,
+                    feedback="Review rejected: execution failed with task errors.",
+                )
+                context.set_review_result(rej_result)
+                return Failure("Review validation rejected due to execution failure.")
+
             attempt = 0
             while attempt < max_review_attempts:
                 attempt += 1
@@ -1113,8 +1163,17 @@ def _create_seo_update_handler(
     """Create handler for SEO_UPDATE stage."""
     async def handler(context: WorkflowContext) -> Result[WorkflowContext, str]:
         try:
-            if context.execution_result is None:
-                return Failure("No execution result available for SEO update")
+            exec_res = context.execution_result
+            latest_review = context.get_latest_review_result()
+
+            if (not exec_res or not exec_res.success or exec_res.failed_tasks > 0) and not context.config.get("allow_partial_execution", False):
+                logger.warning("SEO Update skipped due to execution failure")
+                return Failure("SEO Update stage skipped due to execution task failures")
+
+            from seo_agent.models.review import ReviewDecision
+            if latest_review and getattr(latest_review, "decision", None) != ReviewDecision.APPROVED and not context.config.get("allow_partial_execution", False):
+                logger.warning("SEO Update skipped due to rejected review")
+                return Failure("SEO Update stage skipped due to rejected review")
 
             # Apply approved file changes (metadata updates, code edits, page generations) to disk
             from seo_agent.seo.applier import ApprovedChangesApplier

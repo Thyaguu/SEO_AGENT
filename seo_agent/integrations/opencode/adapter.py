@@ -17,14 +17,16 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from seo_agent.core.result import Result, Success, Failure
+from seo_agent.core.result import Failure, Result, Success
+from seo_agent.integrations.opencode.models import (
+    OpenCodeAction,
+    OpenCodeActionRequest,
+)
 
 if TYPE_CHECKING:
     from seo_agent.integrations.opencode.models import (
         OpenCodeRequest,
         OpenCodeResponse,
-        OpenCodeActionRequest,
-        OpenCodeAction,
         OpenCodeStatus,
         OpenCodeFileChange,
         OpenCodeModel,
@@ -436,7 +438,7 @@ class OpenCodeAdapter:
 
         return instructions_map.get(task_type)
 
-    def _build_actions_for_task(
+    def _build_opencode_actions(
         self,
         task_type: TaskType,
         input_data: dict[str, Any],
@@ -457,6 +459,26 @@ class OpenCodeAdapter:
         if task_type.value in ("metadata_update", "seo_page_generation"):
             file_path = input_data.get("file_path")
             content = input_data.get("content", "")
+
+            if task_type.value == "seo_page_generation" and not content and file_path:
+                kw = input_data.get("primary_keyword", "SEO Solutions")
+                content = (
+                    f"<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n"
+                    f"    <meta charset=\"UTF-8\">\n"
+                    f"    <title>{kw} | Enterprise SEO Solutions</title>\n"
+                    f"    <meta name=\"description\" content=\"Comprehensive guide and enterprise services for {kw}.\">\n"
+                    f"    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
+                    f"</head>\n<body>\n"
+                    f"    <header>\n        <h1>{kw}</h1>\n    </header>\n"
+                    f"    <main>\n"
+                    f"        <section>\n"
+                    f"            <h2>Overview</h2>\n"
+                    f"            <p>Welcome to our dedicated page for {kw}. Streamline your enterprise workflow with specialized solutions.</p>\n"
+                    f"        </section>\n"
+                    f"    </main>\n"
+                    f"</body>\n</html>"
+                )
+
             if file_path:
                 actions.append(
                     OpenCodeActionRequest(

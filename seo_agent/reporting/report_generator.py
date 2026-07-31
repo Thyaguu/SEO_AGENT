@@ -301,13 +301,47 @@ class ReportGenerator:
         ]
 
         # 8. Execution Summary
+        t_failed = getattr(exec_res, "failed_tasks", 0) if exec_res else 0
+        fail_reasons = []
+        failed_task_id = "N/A"
+        if exec_res and hasattr(exec_res, "phase_results"):
+            for pr in exec_res.phase_results:
+                for tr in getattr(pr, "task_results", []):
+                    if not getattr(tr, "success", True) and getattr(tr, "error", None):
+                        failed_task_id = getattr(tr, 'task_id', 'N/A')
+                        fail_reasons.append(f"Task {failed_task_id}: {tr.error}")
+        if context.errors:
+            fail_reasons.extend(context.errors)
+
+        first_err = fail_reasons[0] if fail_reasons else "N/A"
+        exc_type = "Runtime Error"
+        for ex in ("NameError", "AttributeError", "ImportError", "TypeError", "ValueError", "AssertionError", "SyntaxError", "KeyError"):
+            if ex in first_err:
+                exc_type = ex
+                break
+
+        is_retryable = not any(ex in first_err for ex in ("NameError", "AttributeError", "ImportError", "TypeError", "ValueError", "AssertionError", "SyntaxError"))
+        fail_class = "RETRYABLE" if is_retryable else "NON-RETRYABLE"
+        root_cause = f"Execution interrupted due to {exc_type}: {first_err}" if fail_reasons else "N/A"
+        rec_fix = "Review task parameter schemas and function imports." if exc_type != "Runtime Error" else "Check network availability and retry workflow."
+
         exec_summary = ExecutionSummaryData(
             tasks_generated=t_generated,
             tasks_executed=t_executed,
+            tasks_failed=t_failed,
             tasks_skipped=0,
             duration_seconds=round(duration, 2),
             opencode_requests=t_generated,
             opencode_responses=t_generated,
+            failure_reasons=fail_reasons,
+            failure_classification=fail_class if fail_reasons else "N/A",
+            exception_type=exc_type if fail_reasons else "N/A",
+            exception_message=first_err,
+            failed_stage=context.stage.value if hasattr(context.stage, "value") else str(context.stage),
+            failed_task_id=failed_task_id,
+            retry_count=0,
+            root_cause=root_cause,
+            recommended_fix=rec_fix,
             files_modified=[p.file_name for p in file_changes],
             files_skipped=[],
             files_failed=[],

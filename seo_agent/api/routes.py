@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 
 from seo_agent.api.dependencies import (
     WorkflowOrchestratorDep,
@@ -334,21 +335,25 @@ async def run_seo_optimization(
         result = await orchestrator.run(context)
 
         # Convert result to response
-        if result.is_success():
+        response_data = _context_to_response(request_id, context, started_at)
+
+        if result.is_success() and context.get_workflow_status() != "FAILED":
             logger.info(
                 "SEO optimization completed successfully",
                 extra={"request_id": request_id},
             )
-            return _context_to_response(request_id, context, started_at)
+            return response_data
         else:
-            error_message = result.get_error_or_none() or "Unknown error"
+            error_message = result.get_error_or_none() or "Execution failure"
             logger.error(
                 "SEO optimization failed",
                 extra={"request_id": request_id, "error": error_message},
             )
-            # Return response with failure status
             context.add_error(error_message)
-            return _context_to_response(request_id, context, started_at)
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content=response_data.model_dump(mode="json"),
+            )
 
     except Exception as e:
         logger.exception(

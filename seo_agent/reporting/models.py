@@ -97,6 +97,16 @@ class ExecutionSummaryData:
     duration_seconds: float
     opencode_requests: int
     opencode_responses: int
+    tasks_failed: int = 0
+    failure_reasons: list[str] = field(default_factory=list)
+    failure_classification: str = "N/A"
+    exception_type: str = "N/A"
+    exception_message: str = "N/A"
+    failed_stage: str = "N/A"
+    failed_task_id: str = "N/A"
+    retry_count: int = 0
+    root_cause: str = "N/A"
+    recommended_fix: str = "N/A"
     files_modified: list[str] = field(default_factory=list)
     files_skipped: list[str] = field(default_factory=list)
     files_failed: list[str] = field(default_factory=list)

@@ -332,6 +332,49 @@ class ExecutionResult:
         """Count of metadata updates."""
         return len(self.metadata_updates)
 
+    @property
+    def completed_tasks(self) -> int:
+        """Count of completed tasks across all phases."""
+        count = 0
+        for pr in self.phase_results:
+            count += sum(1 for tr in getattr(pr, "task_results", []) if getattr(tr, "success", False))
+        return count
+
+    @property
+    def failed_tasks(self) -> int:
+        """Count of failed tasks across all phases."""
+        count = 0
+        for pr in self.phase_results:
+            count += sum(1 for tr in getattr(pr, "task_results", []) if not getattr(tr, "success", False))
+        return count
+
+    @property
+    def skipped_tasks(self) -> int:
+        """Count of skipped tasks across all phases."""
+        count = 0
+        for pr in self.phase_results:
+            count += sum(1 for tr in getattr(pr, "task_results", []) if getattr(tr, "status", None) == TaskStatus.SKIPPED)
+        return count
+
+    @property
+    def total_tasks(self) -> int:
+        """Total task count across all phases or plan."""
+        if self.plan and hasattr(self.plan, "total_tasks"):
+            return self.plan.total_tasks
+        return self.completed_tasks + self.failed_tasks + self.skipped_tasks
+
+    @property
+    def overall_status(self) -> str:
+        """Overall status label."""
+        if not self.success or self.failed_tasks > 0:
+            return "FAILED" if self.completed_tasks == 0 else "PARTIAL SUCCESS"
+        return "SUCCESS"
+
+    @property
+    def execution_time(self) -> float:
+        """Execution time in seconds."""
+        return self.total_duration_seconds
+
 
 @dataclass(frozen=True)
 class ExecutionContext:

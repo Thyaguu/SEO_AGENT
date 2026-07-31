@@ -154,6 +154,7 @@ class MarkdownRenderer:
         lines.append("")
         lines.append(f"- **Tasks Generated:** {s8.tasks_generated}")
         lines.append(f"- **Tasks Executed:** {s8.tasks_executed}")
+        lines.append(f"- **Tasks Failed:** {s8.tasks_failed}")
         lines.append(f"- **Tasks Skipped:** {s8.tasks_skipped}")
         lines.append(f"- **Execution Duration:** {s8.duration_seconds}s")
         lines.append(f"- **OpenCode API Requests:** {s8.opencode_requests}")
@@ -161,6 +162,20 @@ class MarkdownRenderer:
         lines.append(f"- **Files Modified:** {', '.join(s8.files_modified) if s8.files_modified else 'None'}")
         lines.append(f"- **Files Skipped:** {', '.join(s8.files_skipped) if s8.files_skipped else 'None'}")
         lines.append(f"- **Files Failed:** {', '.join(s8.files_failed) if s8.files_failed else 'None'}")
+        if s8.failure_reasons:
+            lines.append("")
+            lines.append("### Failure Diagnostics & Classification")
+            lines.append(f"- **Classification:** `{s8.failure_classification}`")
+            lines.append(f"- **Exception Type:** `{s8.exception_type}`")
+            lines.append(f"- **Failed Stage:** `{s8.failed_stage}`")
+            lines.append(f"- **Failed Task ID:** `{s8.failed_task_id}`")
+            lines.append(f"- **Retry Count:** {s8.retry_count}")
+            lines.append(f"- **Root Cause:** {s8.root_cause}")
+            lines.append(f"- **Recommended Fix:** {s8.recommended_fix}")
+            lines.append("")
+            lines.append("#### Failure Reasons")
+            for err in s8.failure_reasons:
+                lines.append(f"- {err}")
         lines.append("")
 
         # Section 9: Review Summary
