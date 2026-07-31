@@ -32,19 +32,15 @@ def test_csv_reader_valid_content(tmp_path: Path):
     assert first.page_path == "/about"
 
 
-def test_csv_reader_missing_keyword_column_fails(tmp_path: Path):
-    csv_file = tmp_path / "invalid.csv"
-    csv_file.write_text(
-        "SEO Meta Title,SEO Meta Description\n"
-        "About Page,Description Here\n",
-        encoding="utf-8"
-    )
+def test_csv_reader_empty_file_fails(tmp_path: Path):
+    csv_file = tmp_path / "empty.csv"
+    csv_file.write_text("", encoding="utf-8")
 
     reader = CSVSEOInputReader()
     res = reader.read(csv_file)
 
     assert res.is_failure()
-    assert "missing required keyword column" in res.get_error_or_none().lower()
+    assert "empty" in res.get_error_or_none().lower()
 
 
 def test_json_reader_valid_payload():

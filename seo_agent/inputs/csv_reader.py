@@ -150,15 +150,29 @@ class CSVSEOInputReader(BaseSEOInputReader):
                 if norm_key in COLUMN_MAP:
                     mapped_field = COLUMN_MAP[norm_key]
                     header_map[original_col] = mapped_field
-                    if norm_key in KEYWORD_COLUMNS:
+                    if norm_key in KEYWORD_COLUMNS or mapped_field == "keyword":
                         has_keyword_col = True
                 else:
-                    header_map[original_col] = original_col
+                    if "keyword" in norm_key and not any(s in norm_key for s in ("score", "volume", "difficulty", "density", "count")):
+                        header_map[original_col] = "keyword"
+                        has_keyword_col = True
+                    else:
+                        header_map[original_col] = original_col
 
             if not has_keyword_col:
-                return Failure(
-                    "CSV missing required keyword column (must contain at least one of: 'keyword', 'term', 'seed_keyword', 'topic', 'phrase')"
-                )
+                for original_col in reader.fieldnames:
+                    norm_k = _normalize_key(original_col)
+                    if not any(s in norm_k for s in ("score", "volume", "difficulty", "density", "count", "id", "num")):
+                        header_map[original_col] = "keyword"
+                        has_keyword_col = True
+                        logger.info(f"Fallback heuristic selected column '{original_col}' as keyword column")
+                        break
+
+            if not has_keyword_col and reader.fieldnames:
+                # Force first column as keyword column as ultimate fallback
+                first_col = reader.fieldnames[0]
+                header_map[first_col] = "keyword"
+                has_keyword_col = True
 
             records: list[NormalizedSEOEntry] = []
             skipped_count = 0

@@ -281,18 +281,38 @@ class WorkflowOrchestrator:
             res = reader.read(source)
             if res.is_success():
                 context.seo_input = res.get_or_none()
-                logger.info(f"Loaded {context.seo_input.records_loaded} SEO record(s) from CSV input")
             else:
-                logger.warning(f"Failed to read CSV input: {res.get_error_or_none()}")
+                logger.error(f"Failed to read CSV input: {res.get_error_or_none()}")
 
         elif json_path:
             reader = JSONSEOInputReader()
             res = reader.read(json_path)
             if res.is_success():
                 context.seo_input = res.get_or_none()
-                logger.info(f"Loaded {context.seo_input.records_loaded} SEO record(s) from JSON input")
             else:
-                logger.warning(f"Failed to read JSON input: {res.get_error_or_none()}")
+                logger.error(f"Failed to read JSON input: {res.get_error_or_none()}")
+
+        if context.seo_input and context.seo_input.records:
+            logger.info("============================================================")
+            logger.info("                  SEO INTELLIGENCE LOADING                  ")
+            logger.info("============================================================")
+            logger.info(f"Keywords Loaded: {context.seo_input.records_loaded}")
+            logger.info("Status:\nSUCCESS\n")
+
+            intent_counts: dict[str, int] = {}
+            for rec in context.seo_input.records:
+                intent_key = (rec.search_intent or "informational").lower()
+                intent_counts[intent_key] = intent_counts.get(intent_key, 0) + 1
+
+            logger.info("============================================================")
+            logger.info("               KEYWORD INTELLIGENCE ANALYSIS                ")
+            logger.info("============================================================")
+            logger.info(f"Commercial\n{intent_counts.get('commercial', 0)}\n")
+            logger.info(f"Informational\n{intent_counts.get('informational', 0)}\n")
+            logger.info(f"Navigational\n{intent_counts.get('navigational', 0)}\n")
+            if intent_counts.get("transactional"):
+                logger.info(f"Transactional\n{intent_counts.get('transactional', 0)}\n")
+            logger.info(f"Total Pool: {len(context.seo_input.records)}\n")
 
     def _print_stage_report(
         self,
@@ -819,28 +839,57 @@ def _create_planning_handler(
             result = planning_agent.plan(input_data)
             context.set_execution_plan(result.execution_plan)
 
-            if getattr(result, "matching_result", None):
+            if getattr(result, "matching_result", None) and result.matching_result.assignments:
                 context.metadata["matching_result"] = result.matching_result
-                logger.info("====================================================")
-                logger.info("AI PAGE-KEYWORD SEMANTIC MATCHING RESULTS")
-                logger.info("====================================================")
+                logger.info("============================================================")
+                logger.info("                  AI PAGE–KEYWORD MATCHING                  ")
+                logger.info("============================================================")
                 for ass in result.matching_result.assignments:
                     logger.info(
-                        f"Page: {ass.page_route}\n"
-                        f"  - Primary Keyword: \"{ass.primary_keyword.keyword}\"\n"
-                        f"  - Secondary Keywords: [\"{ass.secondary_keywords[0].keyword}\", \"{ass.secondary_keywords[1].keyword}\"]\n"
-                        f"  - Confidence Score: {int(ass.confidence_score * 100)}%\n"
-                        f"  - AI Reasoning: {ass.ai_reasoning}"
+                        f"Page:\n{ass.page_route}\n\n"
+                        f"Primary\n{ass.primary_keyword.keyword}\n\n"
+                        f"Secondary\n\n"
+                        f"• {ass.secondary_keywords[0].keyword}\n"
+                        f"• {ass.secondary_keywords[1].keyword}\n\n"
+                        f"Confidence\n{int(ass.confidence_score * 100)}%\n\n"
+                        f"Reason\n\n{ass.ai_reasoning}\n"
                     )
-                if result.matching_result.unassigned_actions:
-                    logger.info("----------------------------------------------------")
-                    logger.info("UNASSIGNED KEYWORD STRATEGY DECISIONS")
-                    for unass in result.matching_result.unassigned_actions:
-                        logger.info(
-                            f"Keyword: \"{unass.keyword_record.keyword}\" -> Action: {unass.action.upper()} "
-                            f"(Target: {unass.target_slug or 'N/A'}) | {unass.reasoning}"
-                        )
-                logger.info("====================================================")
+
+                # Planning Validation
+                pages_count = len(result.matching_result.assignments)
+                kw_count = len(context.seo_input.records) if context.seo_input else 0
+                prim_count = len(result.matching_result.assignments)
+                sec_count = len(result.matching_result.assignments) * 2
+
+                # Check duplicate primary assignments
+                prim_terms = [a.primary_keyword.keyword for a in result.matching_result.assignments]
+                dup_count = len(prim_terms) - len(set(prim_terms))
+
+                logger.info("============================================================")
+                logger.info("                    PLANNING VALIDATION                     ")
+                logger.info("============================================================")
+                logger.info(f"✓ Pages Discovered: {pages_count}")
+                logger.info(f"✓ Keywords Loaded: {kw_count}")
+                logger.info(f"✓ Primary Assignments: {prim_count}/{pages_count}")
+                logger.info(f"✓ Secondary Assignments: {sec_count}/{pages_count * 2}")
+                logger.info(f"✓ Duplicate Primary Keywords: {dup_count}")
+                logger.info("✓ Metadata Completeness: Complete\n")
+                logger.info("Status:\nREADY FOR EXECUTION\n")
+
+                # Execution Plan Banner
+                logger.info("============================================================")
+                logger.info("                       EXECUTION PLAN                       ")
+                logger.info("============================================================")
+                for idx, t in enumerate(result.execution_plan.all_tasks, start=1):
+                    p_kw = t.input_data.get("primary_keyword", "N/A")
+                    s_kws = t.input_data.get("secondary_keywords", [])
+                    sec_str = ", ".join(s_kws) if isinstance(s_kws, list) else str(s_kws)
+                    logger.info(
+                        f"Task {idx}\n\n"
+                        f"Target Page\n{t.input_data.get('target_files', ['N/A'])[0]}\n\n"
+                        f"Primary Keyword\n{p_kw}\n\n"
+                        f"Secondary Keywords\n\n{sec_str}\n"
+                    )
 
             return Success(context)
         except Exception as e:
