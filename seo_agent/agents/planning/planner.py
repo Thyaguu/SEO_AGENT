@@ -61,6 +61,10 @@ class PlanningInput:
     seo_input: SEOInputCollection | None = None
 
 
+from seo_agent.models.page_keyword_mapping import KeywordMatchingResult
+from seo_agent.agents.planning.page_keyword_matcher import PageKeywordMatcher
+
+
 @dataclass(frozen=True)
 class PlanningResult:
     """Result of the planning process.
@@ -69,6 +73,7 @@ class PlanningResult:
         execution_plan: Generated execution plan.
         repository_analysis: Repository analysis results.
         keyword_selection: Keyword selection results.
+        matching_result: AI Page-Keyword matching results.
         planned_at: Timestamp of planning.
         duration_seconds: Time taken for planning.
     """
@@ -76,8 +81,9 @@ class PlanningResult:
     execution_plan: ExecutionPlan
     repository_analysis: RepositoryAnalysis
     keyword_selection: KeywordSelectionResult
-    planned_at: datetime
-    duration_seconds: float
+    matching_result: KeywordMatchingResult | None = None
+    planned_at: datetime = field(default_factory=datetime.utcnow)
+    duration_seconds: float = 0.0
 
 
 class Planner:
@@ -158,6 +164,14 @@ class Planner:
             existing_pages=input_data.page_info,
         )
 
+        # Step 2.5: Perform AI Page-Keyword Semantic Matching if SEO Input Pool is present
+        matching_result = None
+        if input_data.seo_input and input_data.seo_input.records:
+            self._logger.debug("step_2_5_ai_page_keyword_matching")
+            matcher = PageKeywordMatcher()
+            pages_list = list(input_data.page_info) if input_data.page_info else []
+            matching_result = matcher.match_pages(pages_list, input_data.seo_input.records)
+
         # Step 3: Generate execution plan
         self._logger.debug("step_3_generating_execution_plan")
         execution_plan = self._task_planner.plan(
@@ -166,6 +180,7 @@ class Planner:
             keyword_selection=keyword_selection,
             repository_path=input_data.repository_path,
             seo_input=input_data.seo_input,
+            matching_result=matching_result,
         )
 
         # Calculate duration
@@ -175,6 +190,7 @@ class Planner:
             execution_plan=execution_plan,
             repository_analysis=repository_analysis,
             keyword_selection=keyword_selection,
+            matching_result=matching_result,
             planned_at=start_time,
             duration_seconds=duration,
         )

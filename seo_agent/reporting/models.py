@@ -161,11 +161,30 @@ class SEOInputSummaryData:
 
 
 @dataclass
+class PageKeywordAssignmentData:
+    page_route: str
+    primary_keyword: str
+    secondary_keywords: list[str]
+    confidence_score: float
+    ai_reasoning: str
+
+
+@dataclass
+class UnassignedKeywordActionData:
+    keyword: str
+    action: str
+    target_slug: str | None
+    reasoning: str
+
+
+@dataclass
 class ExecutionIntelligenceReportModel:
     executive_summary: ExecutiveSummaryData
     repository_analysis: RepositoryAnalysisData
     ai_understanding: AIUnderstandingData
     seo_input_summary: SEOInputSummaryData | None = None
+    page_keyword_assignments: list[PageKeywordAssignmentData] = field(default_factory=list)
+    unassigned_keyword_actions: list[UnassignedKeywordActionData] = field(default_factory=list)
     planning_decisions: list[PlanningDecisionData] = field(default_factory=list)
     file_changes: list[FileChangeData] = field(default_factory=list)
     before_after_comparisons: list[PageComparisonData] = field(default_factory=list)

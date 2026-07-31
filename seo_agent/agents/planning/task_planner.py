@@ -20,6 +20,8 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
+from pathlib import Path
+
 from seo_agent.core.logging import get_logger
 from seo_agent.models.repository import PageInfo
 from seo_agent.models.seo import Keyword, Metadata, SEOPage
@@ -38,8 +40,6 @@ from .keyword_selector import KeywordSelectionResult, KeywordSelector
 from .repository_analyzer import RepositoryAnalysis, RepositoryAnalyzer
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from seo_agent.models.repository import RepositoryInfo
     from seo_agent.models.seo_input import SEOInputCollection
 
@@ -117,6 +117,7 @@ class TaskPlanner:
         keyword_selection: KeywordSelectionResult,
         repository_path: Path,
         seo_input: Any | None = None,
+        matching_result: Any | None = None,
     ) -> ExecutionPlan:
         """Generate an ExecutionPlan with Task objects from analysis.
 
@@ -126,6 +127,7 @@ class TaskPlanner:
             keyword_selection: Keyword selection results.
             repository_path: Path to the repository.
             seo_input: Optional normalized SEO input collection.
+            matching_result: Optional AI Page-Keyword matching results.
 
         Returns:
             ExecutionPlan ready for the execution agent.
@@ -142,7 +144,7 @@ class TaskPlanner:
         )
 
         # Convert templates to tasks
-        tasks = self._create_tasks(templates, repository_path, seo_input=seo_input)
+        tasks = self._create_tasks(templates, repository_path, seo_input=seo_input, matching_result=matching_result)
 
         # Create dependencies
         tasks = self._create_dependencies(tasks)
@@ -486,6 +488,7 @@ class TaskPlanner:
         templates: list[TaskTemplate],
         repository_path: Path,
         seo_input: Any | None = None,
+        matching_result: Any | None = None,
     ) -> list[Task]:
         """Convert templates to Task objects.
 
@@ -493,6 +496,7 @@ class TaskPlanner:
             templates: Task templates.
             repository_path: Repository path.
             seo_input: Optional SEO input collection.
+            matching_result: Optional AI Page-Keyword matching results.
 
         Returns:
             List of Task objects.
@@ -509,7 +513,7 @@ class TaskPlanner:
                 break
 
             # Build input_data in the schema the executor expects
-            input_data = self._build_input_data(template, repository_path, seo_input=seo_input)
+            input_data = self._build_input_data(template, repository_path, seo_input=seo_input, matching_result=matching_result)
 
             task = Task(
                 task_id=f"task-{task_id:04d}",
@@ -523,6 +527,37 @@ class TaskPlanner:
             )
             tasks.append(task)
             task_id += 1
+
+        # Add tasks for unassigned keyword actions if generate_seo_page requested
+        if matching_result and getattr(matching_result, "unassigned_actions", None):
+            for action in matching_result.unassigned_actions:
+                if action.action == "generate_seo_page" and action.target_slug:
+                    target_file = action.target_slug
+                    abs_path = str(repository_path / target_file)
+                    gen_input = {
+                        "target_files": [target_file],
+                        "file_path": abs_path,
+                        "workspace_path": str(repository_path),
+                        "complexity": "medium",
+                        "phase": "page_generation",
+                        "primary_keyword": action.keyword_record.keyword,
+                        "instructions": (
+                            f"Generate a new SEO landing page '{target_file}' for keyword '{action.keyword_record.keyword}'. "
+                            f"Reasoning: {action.reasoning}"
+                        ),
+                    }
+                    gen_task = Task(
+                        task_id=f"task-{task_id:04d}",
+                        task_type=TaskType.SEO_PAGE_GENERATION,
+                        description=f"Generate new SEO landing page {target_file} for '{action.keyword_record.keyword}'",
+                        status=TaskStatus.PENDING,
+                        priority=TaskPriority.HIGH,
+                        dependencies=tuple(),
+                        input_data=gen_input,
+                        output_data={"outputs": [target_file]},
+                    )
+                    tasks.append(gen_task)
+                    task_id += 1
 
         return tasks
 
@@ -552,6 +587,7 @@ class TaskPlanner:
         template: TaskTemplate,
         repository_path: Path,
         seo_input: Any | None = None,
+        matching_result: Any | None = None,
     ) -> dict[str, Any]:
         """Build executor-compatible input_data from a TaskTemplate.
 
@@ -566,6 +602,7 @@ class TaskPlanner:
             template: The task template to convert.
             repository_path: Path to the repository.
             seo_input: Optional SEO input collection.
+            matching_result: Optional AI Page-Keyword matching results.
 
         Returns:
             Dictionary of input data for the executor.
@@ -582,6 +619,66 @@ class TaskPlanner:
             "complexity": template.complexity.value,
             "phase": template.phase,
         }
+
+        # Check for AI Page-Keyword assignment match
+        assignment_match = None
+        if matching_result and getattr(matching_result, "assignments", None):
+            clean_target = str(resolved_file).lower().strip("/")
+            target_base = Path(clean_target).name
+            for ass in matching_result.assignments:
+                p_route = str(ass.page_route).lower().strip("/")
+                p_base = Path(p_route).name
+                if clean_target == p_route or target_base == p_base or clean_target.endswith(p_route) or p_route.endswith(clean_target):
+                    assignment_match = ass
+                    break
+
+        if assignment_match:
+            prim = assignment_match.primary_keyword
+            sec1 = assignment_match.secondary_keywords[0]
+            sec2 = assignment_match.secondary_keywords[1]
+
+            base["primary_keyword"] = prim.keyword
+            base["secondary_keywords"] = [sec1.keyword, sec2.keyword]
+            base["confidence_score"] = assignment_match.confidence_score
+            base["ai_reasoning"] = assignment_match.ai_reasoning
+
+            title_val = prim.meta_title or f"{prim.keyword} | {sec1.keyword} Solutions"
+            desc_val = prim.meta_description or f"Leading {prim.keyword} services. Specialized in {sec1.keyword} and {sec2.keyword}."
+            h2_val = prim.h2_outlines or [sec1.keyword, sec2.keyword, "Key Benefits & Features"]
+
+            base["target_metadata"] = {
+                "primary_keyword": prim.keyword,
+                "secondary_keywords": [sec1.keyword, sec2.keyword],
+                "title": title_val,
+                "description": desc_val,
+                "h1": prim.keyword,
+                "h2_outlines": h2_val,
+                "canonical": prim.canonical,
+                "og_title": prim.og_title or title_val,
+                "og_description": prim.og_description or desc_val,
+                "twitter_card": prim.twitter_card or "summary_large_image",
+                "structured_data": prim.structured_data,
+                "internal_links": prim.lsi_keywords,
+            }
+
+            base["instructions"] = (
+                f"Update the SEO metadata in the HTML file '{resolved_file}' (located at '{abs_file_path}') "
+                f"using the AI Page-Keyword Semantic Matching assignments:\n"
+                f"- Target Page: {resolved_file}\n"
+                f"- Primary Keyword: \"{prim.keyword}\"\n"
+                f"- Secondary Keywords: [\"{sec1.keyword}\", \"{sec2.keyword}\"]\n"
+                f"- Confidence Score: {int(assignment_match.confidence_score * 100)}%\n"
+                f"- Assignment Reasoning: {assignment_match.ai_reasoning}\n"
+                f"- Title Tag: \"{title_val}\"\n"
+                f"- Meta Description: \"{desc_val}\"\n"
+                f"- Primary H1 Heading: \"{prim.keyword}\"\n"
+                f"- H2 Outlines: {', '.join(h2_val)}\n"
+                f"- Canonical URL: \"{prim.canonical or ''}\"\n"
+                f"- Social Metadata: OpenGraph (og:title, og:description) & Twitter Cards\n"
+                f"- Structured Data Schema: Organization / Product Schema\n"
+                f"- Image Alt Tags: Optimized for '{prim.keyword}' and '{sec1.keyword}'"
+            )
+            return base
 
         # Match entry from seo_input if present
         entry_match = None

@@ -61,6 +61,21 @@ class MarkdownRenderer:
             lines.append(f"- **Matched Pages:** {si.matched_pages}")
             lines.append(f"- **Unmatched Records:** {si.unmatched_records}")
             lines.append(f"- **Skipped Records:** {si.skipped_records}")
+        if report.page_keyword_assignments:
+            lines.append("")
+            lines.append("### AI Page-Keyword Semantic Assignments")
+            lines.append("| Page Route | Primary Keyword | Secondary Keywords | Confidence | AI Reasoning |")
+            lines.append("|---|---|---|---|---|")
+            for ass in report.page_keyword_assignments:
+                sec_str = ", ".join(ass.secondary_keywords)
+                lines.append(f"| `{ass.page_route}` | **{ass.primary_keyword}** | {sec_str} | {int(ass.confidence_score * 100)}% | {ass.ai_reasoning} |")
+        if report.unassigned_keyword_actions:
+            lines.append("")
+            lines.append("### Unassigned Keyword Strategy")
+            lines.append("| Keyword | Action | Target Slug | Reasoning |")
+            lines.append("|---|---|---|---|")
+            for unass in report.unassigned_keyword_actions:
+                lines.append(f"| **{unass.keyword}** | `{unass.action.upper()}` | `{unass.target_slug or 'N/A'}` | {unass.reasoning} |")
         lines.append("")
 
         # Section 3: AI Understanding

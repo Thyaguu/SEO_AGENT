@@ -24,11 +24,13 @@ from seo_agent.reporting.models import (
     GitSummaryData,
     MetricsData,
     PageComparisonData,
+    PageKeywordAssignmentData,
     PlanningDecisionData,
     RepositoryAnalysisData,
     ReviewSummaryData,
     SEOInputSummaryData,
     TimelineItem,
+    UnassignedKeywordActionData,
 )
 
 if TYPE_CHECKING:
@@ -400,11 +402,34 @@ class ReportGenerator:
                 skipped_records=context.seo_input.skipped_records,
             )
 
+        # Construct Page-Keyword Assignment Data if present
+        pk_assignments: list[PageKeywordAssignmentData] = []
+        unassigned_acts: list[UnassignedKeywordActionData] = []
+        matching_res = context.metadata.get("matching_result")
+        if matching_res:
+            for ass in getattr(matching_res, "assignments", []):
+                pk_assignments.append(PageKeywordAssignmentData(
+                    page_route=ass.page_route,
+                    primary_keyword=ass.primary_keyword.keyword,
+                    secondary_keywords=[ass.secondary_keywords[0].keyword, ass.secondary_keywords[1].keyword],
+                    confidence_score=ass.confidence_score,
+                    ai_reasoning=ass.ai_reasoning,
+                ))
+            for unass in getattr(matching_res, "unassigned_actions", []):
+                unassigned_acts.append(UnassignedKeywordActionData(
+                    keyword=unass.keyword_record.keyword,
+                    action=unass.action,
+                    target_slug=unass.target_slug,
+                    reasoning=unass.reasoning,
+                ))
+
         return ExecutionIntelligenceReportModel(
             executive_summary=exec_sum,
             repository_analysis=repo_analysis,
             ai_understanding=ai_understanding,
             seo_input_summary=seo_input_sum,
+            page_keyword_assignments=pk_assignments,
+            unassigned_keyword_actions=unassigned_acts,
             planning_decisions=planning_decisions,
             file_changes=file_changes,
             before_after_comparisons=before_after_comparisons,

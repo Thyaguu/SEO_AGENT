@@ -1,8 +1,7 @@
-"""SEO input models for external data ingestion (CSV / JSON).
+"""SEO keyword intelligence input models for external data ingestion (CSV / JSON).
 
-This module provides normalized domain models for external SEO data sources.
-Downstream pipeline components consume these models without being coupled
-to CSV or JSON schemas.
+Represents keyword intelligence datasets (search volume, intent, priority scores,
+H2 outlines, LSI keywords, and proposed metadata).
 """
 
 from __future__ import annotations
@@ -13,50 +12,97 @@ from typing import Any
 
 @dataclass
 class NormalizedSEOEntry:
-    """Normalized SEO data entry for a single page.
+    """Normalized keyword intelligence record.
 
     Attributes:
-        url: Target page URL (e.g., "https://example.com/about").
-        page_path: Target relative path or route (e.g., "/about", "about.html").
-        title: Optimized page title tag.
-        description: Optimized meta description tag.
-        canonical: Canonical URL string.
-        keywords: List of target keywords.
-        h1: Primary H1 heading text.
-        og_title: OpenGraph title tag.
-        og_description: OpenGraph description tag.
-        og_image: OpenGraph image URL.
-        twitter_card: Twitter card type (e.g., "summary_large_image").
-        twitter_title: Twitter card title.
-        twitter_description: Twitter card description.
-        twitter_image: Twitter card image URL.
-        structured_data: JSON-LD structured data payload or schema name.
-        internal_link_suggestions: Target anchor links or routes to include.
+        keyword: Target keyword or term (e.g., "Recruitment Software").
+        search_volume: Monthly search volume.
+        competition: Competition or difficulty score (0.0 to 1.0 or 0-100).
+        search_intent: Search intent classification (informational, commercial, navigational, transactional).
+        content_type: Recommended content type (page, blog, guide, product).
+        content_priority_score: Priority score for SEO optimization.
+        ai_opportunity_score: AI opportunity ranking score.
+        ranking_feasibility: Ranking feasibility score.
+        meta_title: Recommended or target meta title.
+        meta_description: Recommended or target meta description.
+        h2_outlines: List of recommended H2 section headings.
+        lsi_keywords: List of Latent Semantic Indexing (LSI) / secondary keywords.
+        page_path: Optional page path or URL hint if provided in CSV.
         raw_data: Original dictionary record for auditing.
     """
 
-    url: str | None = None
+    keyword: str
+    search_volume: int = 0
+    competition: float = 0.0
+    search_intent: str = "informational"
+    content_type: str = "page"
+    content_priority_score: float = 0.0
+    ai_opportunity_score: float = 0.0
+    ranking_feasibility: float = 0.0
+    meta_title: str | None = None
+    meta_description: str | None = None
+    h2_outlines: list[str] = field(default_factory=list)
+    lsi_keywords: list[str] = field(default_factory=list)
     page_path: str | None = None
-    title: str | None = None
-    description: str | None = None
-    canonical: str | None = None
-    keywords: list[str] = field(default_factory=list)
-    h1: str | None = None
-    og_title: str | None = None
-    og_description: str | None = None
-    og_image: str | None = None
-    twitter_card: str | None = None
-    twitter_title: str | None = None
-    twitter_description: str | None = None
-    twitter_image: str | None = None
-    structured_data: Any | None = None
-    internal_link_suggestions: list[str] = field(default_factory=list)
     raw_data: dict[str, Any] = field(default_factory=dict)
+
+    # Legacy compatibility fields
+    @property
+    def title(self) -> str | None:
+        return self.meta_title
+
+    @property
+    def description(self) -> str | None:
+        return self.meta_description
+
+    @property
+    def canonical(self) -> str | None:
+        return self.raw_data.get("canonical") or self.raw_data.get("canonical_url")
+
+    @property
+    def h1(self) -> str | None:
+        return self.raw_data.get("h1")
+
+    @property
+    def og_title(self) -> str | None:
+        return self.raw_data.get("og_title")
+
+    @property
+    def og_description(self) -> str | None:
+        return self.raw_data.get("og_description")
+
+    @property
+    def og_image(self) -> str | None:
+        return self.raw_data.get("og_image")
+
+    @property
+    def twitter_card(self) -> str | None:
+        return self.raw_data.get("twitter_card")
+
+    @property
+    def twitter_title(self) -> str | None:
+        return self.raw_data.get("twitter_title")
+
+    @property
+    def twitter_description(self) -> str | None:
+        return self.raw_data.get("twitter_description")
+
+    @property
+    def twitter_image(self) -> str | None:
+        return self.raw_data.get("twitter_image")
+
+    @property
+    def structured_data(self) -> Any | None:
+        return self.raw_data.get("structured_data")
+
+    @property
+    def internal_link_suggestions(self) -> list[str]:
+        return self.lsi_keywords or self.raw_data.get("internal_link_suggestions", [])
 
 
 @dataclass
 class SEOInputCollection:
-    """Collection of normalized SEO records loaded from an external source.
+    """Collection of keyword intelligence records loaded from CSV/JSON.
 
     Attributes:
         source_type: Type of source ("csv", "json", "none").

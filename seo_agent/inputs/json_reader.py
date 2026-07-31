@@ -1,7 +1,6 @@
-"""JSON / n8n Reader for SEO Agent input data.
+"""JSON / n8n Reader for SEO Agent Keyword Intelligence datasets.
 
-Parses external JSON files or dictionary/list payloads (such as n8n webhooks)
-into identical NormalizedSEOEntry domain models.
+Parses external JSON files or payload items into NormalizedSEOEntry objects.
 """
 
 from __future__ import annotations
@@ -19,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class JSONSEOInputReader(BaseSEOInputReader):
-    """Parses and normalizes JSON / n8n payload input data."""
+    """Parses and normalizes JSON Keyword Intelligence input data."""
 
     def read(self, source: str | Path | dict[str, Any] | list[Any]) -> Result[SEOInputCollection, str]:
         """Read JSON file, string, or list/dict payload and return normalized SEOInputCollection."""
@@ -59,38 +58,33 @@ class JSONSEOInputReader(BaseSEOInputReader):
         skipped_count = 0
 
         for item in raw_items:
-            url = item.get("url") or item.get("page_url")
-            page_path = item.get("page_path") or item.get("path") or item.get("route") or item.get("file_path")
-
-            if not url and not page_path:
+            kw_term = item.get("keyword") or item.get("term") or item.get("seed_keyword") or item.get("topic")
+            if not kw_term or not str(kw_term).strip():
                 skipped_count += 1
                 continue
 
-            kws = item.get("keywords") or item.get("seed_keywords") or []
-            if isinstance(kws, str):
-                kws = [k.strip() for k in kws.replace(";", ",").split(",") if k.strip()]
+            h2s = item.get("h2_outlines") or item.get("h2") or []
+            if isinstance(h2s, str):
+                h2s = [h.strip() for h in h2s.replace(";", "|").replace("\n", "|").split("|") if h.strip()]
 
-            links = item.get("internal_link_suggestions") or item.get("internal_links") or []
-            if isinstance(links, str):
-                links = [l.strip() for l in links.replace("|", ",").replace("\n", ",").split(",") if l.strip()]
+            lsis = item.get("lsi_keywords") or item.get("secondary_keywords") or []
+            if isinstance(lsis, str):
+                lsis = [k.strip() for k in lsis.replace(";", ",").split(",") if k.strip()]
 
             entry = NormalizedSEOEntry(
-                url=url,
-                page_path=page_path,
-                title=item.get("title") or item.get("meta_title"),
-                description=item.get("description") or item.get("meta_description"),
-                canonical=item.get("canonical") or item.get("canonical_url"),
-                keywords=kws if isinstance(kws, list) else [],
-                h1=item.get("h1"),
-                og_title=item.get("og_title"),
-                og_description=item.get("og_description"),
-                og_image=item.get("og_image"),
-                twitter_card=item.get("twitter_card"),
-                twitter_title=item.get("twitter_title"),
-                twitter_description=item.get("twitter_description"),
-                twitter_image=item.get("twitter_image"),
-                structured_data=item.get("structured_data") or item.get("json_ld"),
-                internal_link_suggestions=links if isinstance(links, list) else [],
+                keyword=str(kw_term).strip(),
+                search_volume=int(item.get("search_volume") or item.get("volume") or 0),
+                competition=float(item.get("competition") or item.get("difficulty") or 0.0),
+                search_intent=str(item.get("search_intent") or item.get("intent") or "informational").lower(),
+                content_type=str(item.get("content_type") or "page").lower(),
+                content_priority_score=float(item.get("content_priority_score") or item.get("priority_score") or 0.0),
+                ai_opportunity_score=float(item.get("ai_opportunity_score") or item.get("opportunity_score") or 0.0),
+                ranking_feasibility=float(item.get("ranking_feasibility") or item.get("feasibility") or 0.0),
+                meta_title=item.get("meta_title") or item.get("seo_meta_title") or item.get("title"),
+                meta_description=item.get("meta_description") or item.get("seo_meta_description") or item.get("description"),
+                h2_outlines=h2s if isinstance(h2s, list) else [],
+                lsi_keywords=lsis if isinstance(lsis, list) else [],
+                page_path=item.get("page_path") or item.get("path") or item.get("url"),
                 raw_data=item,
             )
             records.append(entry)

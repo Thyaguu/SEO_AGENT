@@ -764,7 +764,7 @@ def _match_seo_input_records(context: WorkflowContext) -> None:
     matched_pages_set: set[str] = set()
 
     for rec_idx, record in enumerate(context.seo_input.records):
-        rec_path = record.page_path or record.url
+        rec_path = record.page_path or (record.raw_data.get("url") if hasattr(record, "raw_data") else None)
         if not rec_path:
             continue
 
@@ -817,9 +817,31 @@ def _create_planning_handler(
                 seo_input=context.seo_input,
             )
             result = planning_agent.plan(input_data)
-            # PlanningResult is a plain dataclass, not a Result type.
-            # Exceptions are caught by the try/except below.
             context.set_execution_plan(result.execution_plan)
+
+            if getattr(result, "matching_result", None):
+                context.metadata["matching_result"] = result.matching_result
+                logger.info("====================================================")
+                logger.info("AI PAGE-KEYWORD SEMANTIC MATCHING RESULTS")
+                logger.info("====================================================")
+                for ass in result.matching_result.assignments:
+                    logger.info(
+                        f"Page: {ass.page_route}\n"
+                        f"  - Primary Keyword: \"{ass.primary_keyword.keyword}\"\n"
+                        f"  - Secondary Keywords: [\"{ass.secondary_keywords[0].keyword}\", \"{ass.secondary_keywords[1].keyword}\"]\n"
+                        f"  - Confidence Score: {int(ass.confidence_score * 100)}%\n"
+                        f"  - AI Reasoning: {ass.ai_reasoning}"
+                    )
+                if result.matching_result.unassigned_actions:
+                    logger.info("----------------------------------------------------")
+                    logger.info("UNASSIGNED KEYWORD STRATEGY DECISIONS")
+                    for unass in result.matching_result.unassigned_actions:
+                        logger.info(
+                            f"Keyword: \"{unass.keyword_record.keyword}\" -> Action: {unass.action.upper()} "
+                            f"(Target: {unass.target_slug or 'N/A'}) | {unass.reasoning}"
+                        )
+                logger.info("====================================================")
+
             return Success(context)
         except Exception as e:
             logger.exception("Planning stage failed: %s", str(e))
