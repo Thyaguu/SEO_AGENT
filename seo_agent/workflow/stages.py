@@ -53,6 +53,7 @@ class WorkflowStage(Enum):
     REVIEW = "review"
     SEO_UPDATE = "seo_update"
     GIT = "git"
+    EXECUTION_INTELLIGENCE_REPORT = "execution_intelligence_report"
     COMPLETED = "completed"
     FAILED = "failed"
 
@@ -85,6 +86,7 @@ class WorkflowStage(Enum):
             WorkflowStage.REVIEW: "Reviewing and validating changes",
             WorkflowStage.SEO_UPDATE: "Updating SEO files (sitemap, robots)",
             WorkflowStage.GIT: "Performing Git operations",
+            WorkflowStage.EXECUTION_INTELLIGENCE_REPORT: "Generating AI Execution Intelligence Report",
             WorkflowStage.COMPLETED: "Workflow completed successfully",
             WorkflowStage.FAILED: "Workflow failed",
         }
@@ -102,7 +104,8 @@ STAGE_TRANSITIONS: dict[WorkflowStage, tuple[WorkflowStage, ...]] = {
     WorkflowStage.EXECUTION: (WorkflowStage.REVIEW, WorkflowStage.FAILED),
     WorkflowStage.REVIEW: (WorkflowStage.SEO_UPDATE, WorkflowStage.FAILED),
     WorkflowStage.SEO_UPDATE: (WorkflowStage.GIT, WorkflowStage.FAILED),
-    WorkflowStage.GIT: (WorkflowStage.COMPLETED, WorkflowStage.FAILED),
+    WorkflowStage.GIT: (WorkflowStage.EXECUTION_INTELLIGENCE_REPORT, WorkflowStage.FAILED),
+    WorkflowStage.EXECUTION_INTELLIGENCE_REPORT: (WorkflowStage.COMPLETED, WorkflowStage.FAILED),
     WorkflowStage.COMPLETED: tuple(),
     WorkflowStage.FAILED: tuple(),
 }

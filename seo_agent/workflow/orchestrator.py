@@ -423,6 +423,21 @@ class WorkflowOrchestrator:
                 ]
                 output_data.append(("Git Status", "Skipped per context configuration" if context.config.get("skip_git") else "Completed"))
 
+            elif stage == WorkflowStage.EXECUTION_INTELLIGENCE_REPORT:
+                input_data.append(("Repository Path", str(context.repository_path)))
+                processing_steps = [
+                    "Analyzing workflow context...",
+                    "Synthesizing 14 report sections...",
+                    "Rendering Markdown, HTML, and JSON reports...",
+                    "Updating reports index.json...",
+                ]
+                report_paths = context.metadata.get("report_paths", {})
+                if report_paths:
+                    output_data.append(("Markdown Report", str(report_paths.get("markdown", ""))))
+                    output_data.append(("HTML Report", str(report_paths.get("html", ""))))
+                    output_data.append(("JSON Report", str(report_paths.get("json", ""))))
+                    output_data.append(("History Index", str(report_paths.get("index", ""))))
+
             log_stage_report(
                 logger=logger,
                 stage_name=stage_name,
@@ -587,6 +602,12 @@ def create_orchestrator(
             WorkflowStage.GIT,
             _create_git_handler(git_service),
         )
+
+    # Register execution intelligence report stage
+    orchestrator.register_stage_handler(
+        WorkflowStage.EXECUTION_INTELLIGENCE_REPORT,
+        _create_reporting_handler(),
+    )
 
     return orchestrator
 
@@ -1051,5 +1072,21 @@ def _create_git_handler(
                 else "Git commit failed"
             )
         except Exception as e:
+            return Failure(str(e))
+    return handler
+
+
+def _create_reporting_handler() -> StageHandler:
+    """Create handler for EXECUTION_INTELLIGENCE_REPORT stage."""
+    async def handler(context: WorkflowContext) -> Result[WorkflowContext, str]:
+        try:
+            from seo_agent.reporting.manager import ReportManager
+            manager = ReportManager()
+            report_paths = manager.generate_and_save(context)
+            context.metadata["report_paths"] = report_paths
+            logger.info(f"Execution Intelligence Report generated successfully: {report_paths.get('markdown')}")
+            return Success(context)
+        except Exception as e:
+            logger.exception("Failed to generate Execution Intelligence Report")
             return Failure(str(e))
     return handler
