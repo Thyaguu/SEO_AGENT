@@ -155,8 +155,8 @@ class ReportGenerator:
                         file_name=f_name,
                         file_path=str(file_p),
                         reason_selected=f"Core discovered page at route '{page.url_path}'",
-                        changes_applied=changes,
                         why_modified=f"To establish full technical SEO metadata, schema markup, and cross-linking for '{page.url_path}'.",
+                        changes_applied=changes,
                     )
                 )
 

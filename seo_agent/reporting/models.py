@@ -61,8 +61,8 @@ class FileChangeData:
     file_name: str
     file_path: str
     reason_selected: str
-    changes_applied: list[str] = field(default_factory=list)
     why_modified: str
+    changes_applied: list[str] = field(default_factory=list)
 
 
 @dataclass
