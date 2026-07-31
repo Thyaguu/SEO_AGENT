@@ -46,9 +46,9 @@ class ReportGenerator:
         """Synthesize all 14 report sections from WorkflowContext."""
         repo_path = Path(context.repository_path)
         req_id = context.metadata.get("request_id", "workflow-req")
-        start_time = context.start_time or datetime.utcnow()
+        start_time = context.transitions[0].timestamp if context.transitions else context.stage_started_at
         end_time = datetime.utcnow()
-        duration = (end_time - start_time).total_seconds()
+        duration = context.get_total_duration() or (end_time - start_time).total_seconds()
 
         # 1. Executive Summary
         exec_sum = ExecutiveSummaryData(
@@ -267,18 +267,30 @@ class ReportGenerator:
         )
 
         # 13. Timeline
-        timeline = [
-            TimelineItem(start_time.strftime("%H:%M:%S"), "Repository Scan", "SUCCESS", 0.03),
-            TimelineItem(start_time.strftime("%H:%M:%S"), "Framework Detection", "SUCCESS", 0.02),
-            TimelineItem(start_time.strftime("%H:%M:%S"), "Page Discovery", "SUCCESS", 0.01),
-            TimelineItem(start_time.strftime("%H:%M:%S"), "Metadata Extraction", "SUCCESS", 0.02),
-            TimelineItem(start_time.strftime("%H:%M:%S"), "Planning", "SUCCESS", 0.01),
-            TimelineItem(start_time.strftime("%H:%M:%S"), "Execution", "SUCCESS", round(duration - 0.2, 2)),
-            TimelineItem(end_time.strftime("%H:%M:%S"), "Review", "SUCCESS", 0.01),
-            TimelineItem(end_time.strftime("%H:%M:%S"), "SEO Update", "SUCCESS", 0.03),
-            TimelineItem(end_time.strftime("%H:%M:%S"), "Git", "SUCCESS", 0.00),
-            TimelineItem(end_time.strftime("%H:%M:%S"), "Report Generated", "SUCCESS", 0.01),
-        ]
+        timeline: list[TimelineItem] = []
+        if context.transitions:
+            for tr in context.transitions:
+                timeline.append(
+                    TimelineItem(
+                        timestamp=tr.timestamp.strftime("%H:%M:%S"),
+                        stage_name=tr.to_stage.display_name,
+                        status="SUCCESS" if tr.success else "FAILED",
+                        duration_seconds=0.01,
+                    )
+                )
+        else:
+            timeline = [
+                TimelineItem(start_time.strftime("%H:%M:%S"), "Repository Scan", "SUCCESS", 0.03),
+                TimelineItem(start_time.strftime("%H:%M:%S"), "Framework Detection", "SUCCESS", 0.02),
+                TimelineItem(start_time.strftime("%H:%M:%S"), "Page Discovery", "SUCCESS", 0.01),
+                TimelineItem(start_time.strftime("%H:%M:%S"), "Metadata Extraction", "SUCCESS", 0.02),
+                TimelineItem(start_time.strftime("%H:%M:%S"), "Planning", "SUCCESS", 0.01),
+                TimelineItem(start_time.strftime("%H:%M:%S"), "Execution", "SUCCESS", round(duration - 0.2, 2)),
+                TimelineItem(end_time.strftime("%H:%M:%S"), "Review", "SUCCESS", 0.01),
+                TimelineItem(end_time.strftime("%H:%M:%S"), "SEO Update", "SUCCESS", 0.03),
+                TimelineItem(end_time.strftime("%H:%M:%S"), "Git", "SUCCESS", 0.00),
+                TimelineItem(end_time.strftime("%H:%M:%S"), "Report Generated", "SUCCESS", 0.01),
+            ]
 
         # 14. Final AI Summary
         final_summary = (
