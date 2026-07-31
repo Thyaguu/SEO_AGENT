@@ -37,6 +37,9 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+from seo_agent.models.seo_input import SEOInputCollection
+
+
 @dataclass(frozen=True)
 class PlanningInput:
     """Input data for the planning pipeline.
@@ -47,6 +50,7 @@ class PlanningInput:
         seo_payload: SEO payload from n8n.
         repository_path: Path to the repository.
         page_info: Extracted page information with metadata from METADATA_EXTRACTION stage.
+        seo_input: Optional normalized SEO input collection from CSV/JSON.
     """
 
     request_id: str
@@ -54,6 +58,7 @@ class PlanningInput:
     seo_payload: SEOPayload
     repository_path: Path
     page_info: tuple[PageInfo, ...] = field(default_factory=tuple)
+    seo_input: SEOInputCollection | None = None
 
 
 @dataclass(frozen=True)
@@ -160,6 +165,7 @@ class Planner:
             repository_analysis=repository_analysis,
             keyword_selection=keyword_selection,
             repository_path=input_data.repository_path,
+            seo_input=input_data.seo_input,
         )
 
         # Calculate duration

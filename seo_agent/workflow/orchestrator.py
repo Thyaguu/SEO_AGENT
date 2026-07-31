@@ -814,6 +814,7 @@ def _create_planning_handler(
                 seo_payload=seo_payload,
                 repository_path=context.repository_path,
                 page_info=tuple(context.page_info) if context.page_info else (),
+                seo_input=context.seo_input,
             )
             result = planning_agent.plan(input_data)
             # PlanningResult is a plain dataclass, not a Result type.

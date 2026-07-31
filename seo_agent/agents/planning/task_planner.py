@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from seo_agent.models.repository import RepositoryInfo
+    from seo_agent.models.seo_input import SEOInputCollection
 
 logger = get_logger(__name__)
 
@@ -115,14 +116,16 @@ class TaskPlanner:
         repository_analysis: RepositoryAnalysis,
         keyword_selection: KeywordSelectionResult,
         repository_path: Path,
+        seo_input: Any | None = None,
     ) -> ExecutionPlan:
-        """Generate execution plan from analysis results.
+        """Generate an ExecutionPlan with Task objects from analysis.
 
         Args:
             request_id: Request identifier for tracking.
             repository_analysis: Repository analysis results.
             keyword_selection: Keyword selection results.
             repository_path: Path to the repository.
+            seo_input: Optional normalized SEO input collection.
 
         Returns:
             ExecutionPlan ready for the execution agent.
@@ -139,7 +142,7 @@ class TaskPlanner:
         )
 
         # Convert templates to tasks
-        tasks = self._create_tasks(templates, repository_path)
+        tasks = self._create_tasks(templates, repository_path, seo_input=seo_input)
 
         # Create dependencies
         tasks = self._create_dependencies(tasks)
@@ -482,12 +485,14 @@ class TaskPlanner:
         self,
         templates: list[TaskTemplate],
         repository_path: Path,
+        seo_input: Any | None = None,
     ) -> list[Task]:
         """Convert templates to Task objects.
 
         Args:
             templates: Task templates.
             repository_path: Repository path.
+            seo_input: Optional SEO input collection.
 
         Returns:
             List of Task objects.
@@ -504,7 +509,7 @@ class TaskPlanner:
                 break
 
             # Build input_data in the schema the executor expects
-            input_data = self._build_input_data(template, repository_path)
+            input_data = self._build_input_data(template, repository_path, seo_input=seo_input)
 
             task = Task(
                 task_id=f"task-{task_id:04d}",
@@ -546,6 +551,7 @@ class TaskPlanner:
         self,
         template: TaskTemplate,
         repository_path: Path,
+        seo_input: Any | None = None,
     ) -> dict[str, Any]:
         """Build executor-compatible input_data from a TaskTemplate.
 
@@ -559,6 +565,7 @@ class TaskPlanner:
         Args:
             template: The task template to convert.
             repository_path: Path to the repository.
+            seo_input: Optional SEO input collection.
 
         Returns:
             Dictionary of input data for the executor.
@@ -576,18 +583,77 @@ class TaskPlanner:
             "phase": template.phase,
         }
 
+        # Match entry from seo_input if present
+        entry_match = None
+        if seo_input and getattr(seo_input, "records", None):
+            clean_target = str(resolved_file).lower().strip("/")
+            target_base = Path(clean_target).name
+            for rec in seo_input.records:
+                cand = getattr(rec, "page_path", None) or getattr(rec, "url", None)
+                if not cand:
+                    continue
+                clean_cand = str(cand).lower().strip("/")
+                cand_base = Path(clean_cand).name
+                if clean_target == clean_cand or target_base == cand_base or clean_target.endswith(clean_cand) or clean_cand.endswith(clean_target):
+                    entry_match = rec
+                    break
+
+        if entry_match:
+            base["target_metadata"] = {
+                "title": entry_match.title,
+                "description": entry_match.description,
+                "canonical": entry_match.canonical,
+                "keywords": entry_match.keywords,
+                "h1": entry_match.h1,
+                "og_title": entry_match.og_title,
+                "og_description": entry_match.og_description,
+                "og_image": entry_match.og_image,
+                "twitter_card": entry_match.twitter_card,
+                "twitter_title": entry_match.twitter_title,
+                "twitter_description": entry_match.twitter_description,
+                "twitter_image": entry_match.twitter_image,
+                "structured_data": entry_match.structured_data,
+                "internal_links": entry_match.internal_link_suggestions,
+            }
+
         # Parse template inputs for planning context
         parsed = self._parse_inputs(template.inputs)
 
         if template.task_type == TaskType.METADATA_UPDATE:
             keywords = parsed.get("keywords", "")
-            base["instructions"] = (
-                f"Update the SEO metadata in the HTML file '{resolved_file}' (located at '{abs_file_path}'). "
-                f"Target keywords: {keywords}. "
-                f"Ensure the file has an optimized title tag, meta description, "
-                f"Open Graph tags (og:title, og:description, og:image), Twitter Card tags, "
-                f"canonical link tag (<link rel=\"canonical\">), and structured data as appropriate for this page."
-            )
+            if entry_match:
+                details = []
+                if entry_match.title:
+                    details.append(f"- Title Tag: \"{entry_match.title}\"")
+                if entry_match.description:
+                    details.append(f"- Meta Description: \"{entry_match.description}\"")
+                if entry_match.canonical:
+                    details.append(f"- Canonical URL: \"{entry_match.canonical}\"")
+                if entry_match.h1:
+                    details.append(f"- H1 Heading: \"{entry_match.h1}\"")
+                if entry_match.og_title:
+                    details.append(f"- OpenGraph Title: \"{entry_match.og_title}\"")
+                if entry_match.og_image:
+                    details.append(f"- OpenGraph Image: \"{entry_match.og_image}\"")
+                if entry_match.twitter_card:
+                    details.append(f"- Twitter Card: \"{entry_match.twitter_card}\"")
+                if entry_match.keywords:
+                    details.append(f"- Target Keywords: {', '.join(entry_match.keywords)}")
+                if entry_match.internal_link_suggestions:
+                    details.append(f"- Internal Link Suggestions: {', '.join(entry_match.internal_link_suggestions)}")
+
+                base["instructions"] = (
+                    f"Update the SEO metadata in the HTML file '{resolved_file}' (located at '{abs_file_path}') "
+                    f"using the following explicit target CSV/input values:\n" + "\n".join(details)
+                )
+            else:
+                base["instructions"] = (
+                    f"Update the SEO metadata in the HTML file '{resolved_file}' (located at '{abs_file_path}'). "
+                    f"Target keywords: {keywords}. "
+                    f"Ensure the file has an optimized title tag, meta description, "
+                    f"Open Graph tags (og:title, og:description, og:image), Twitter Card tags, "
+                    f"canonical link tag (<link rel=\"canonical\">), and structured data as appropriate for this page."
+                )
 
         elif template.task_type == TaskType.SITEMAP_UPDATE:
             base["instructions"] = (
