@@ -139,23 +139,180 @@ def reset_loggers() -> None:
     _loggers = {}
 
 
+class ConsoleFormatter:
+    """Unified, reusable console formatting utility for workflow stages and banners."""
+
+    DEFAULT_WIDTH: int = 60
+    DEFAULT_KEY_WIDTH: int = 22
+
+    @classmethod
+    def print_banner(
+        cls,
+        title: str,
+        width: int = DEFAULT_WIDTH,
+        char: str = "=",
+    ) -> str:
+        """Format a centered stage or phase banner."""
+        line = char * width
+        centered = title.strip().upper().center(width)
+        return f"{line}\n{centered}\n{line}"
+
+    @classmethod
+    def print_section(
+        cls,
+        title: str,
+        width: int = DEFAULT_WIDTH,
+        char: str = "-",
+    ) -> str:
+        """Format a section header with divider line."""
+        line = char * width
+        return f"{title}\n{line}"
+
+    @classmethod
+    def print_key_value(
+        cls,
+        key: str,
+        value: Any,
+        key_width: int = DEFAULT_KEY_WIDTH,
+    ) -> str:
+        """Format a key/value pair with vertical colon alignment."""
+        key_str = str(key)
+        val_str = str(value)
+        return f"{key_str:<{key_width}} : {val_str}"
+
+    @classmethod
+    def print_list(
+        cls,
+        items: list[Any] | tuple[Any, ...],
+        bullet: str = "• ",
+    ) -> str:
+        """Format a bulleted list of items."""
+        formatted = []
+        for item in items:
+            item_str = str(item)
+            if not item_str.startswith("• ") and not item_str.startswith("- "):
+                item_str = f"{bullet}{item_str}"
+            formatted.append(item_str)
+        return "\n".join(formatted)
+
+    @classmethod
+    def print_status(
+        cls,
+        status: str,
+        width: int = DEFAULT_WIDTH,
+        char: str = "-",
+    ) -> str:
+        """Format a stage status section."""
+        sec = cls.print_section("Status", width=width, char=char)
+        return f"{sec}\n{status}"
+
+    @classmethod
+    def print_summary(
+        cls,
+        repository: str,
+        framework: str,
+        pages: int,
+        keywords: int,
+        tasks_planned: int,
+        tasks_executed: int,
+        tasks_failed: int,
+        review_score: str,
+        sitemap: str,
+        robots: str,
+        reports: str,
+        overall_status: str,
+        total_duration: float,
+        width: int = DEFAULT_WIDTH,
+        key_width: int = DEFAULT_KEY_WIDTH,
+    ) -> str:
+        """Format the final workflow execution summary."""
+        banner = cls.print_banner("WORKFLOW EXECUTION SUMMARY", width=width, char="=")
+        kv = cls.print_key_value
+        lines = [
+            banner,
+            "",
+            kv("Repository", repository, key_width=key_width),
+            kv("Framework", framework, key_width=key_width),
+            "",
+            kv("Pages", pages, key_width=key_width),
+            kv("Keywords", keywords, key_width=key_width),
+            "",
+            kv("Tasks Planned", tasks_planned, key_width=key_width),
+            kv("Tasks Executed", tasks_executed, key_width=key_width),
+            kv("Tasks Failed", tasks_failed, key_width=key_width),
+            "",
+            kv("Review Score", review_score, key_width=key_width),
+            "",
+            kv("Sitemap", sitemap, key_width=key_width),
+            kv("Robots.txt", robots, key_width=key_width),
+            "",
+            kv("Reports", reports, key_width=key_width),
+            "",
+            kv("Overall Status", overall_status, key_width=key_width),
+            kv("Total Duration", f"{total_duration:.2f} seconds", key_width=key_width),
+            "",
+            "=" * width,
+        ]
+        return "\n".join(lines)
+
+    @classmethod
+    def print_stage_report(
+        cls,
+        stage_name: str,
+        input_data: list[tuple[str, str]],
+        processing_steps: list[str],
+        output_data: list[tuple[str, str]],
+        status: str,
+        duration_sec: float,
+        extra_sections: list[tuple[str, list[str]]] | None = None,
+        width: int = DEFAULT_WIDTH,
+        key_width: int = DEFAULT_KEY_WIDTH,
+    ) -> str:
+        """Format a complete structured report for a completed stage."""
+        lines = []
+
+        if input_data:
+            lines.append(cls.print_section("Input", width=width))
+            for k, v in input_data:
+                lines.append(cls.print_key_value(k, v, key_width=key_width))
+            lines.append("")
+
+        if processing_steps:
+            lines.append(cls.print_section("Processing", width=width))
+            lines.append(cls.print_list(processing_steps, bullet="• "))
+            lines.append("")
+
+        if output_data:
+            lines.append(cls.print_section("Output", width=width))
+            for k, v in output_data:
+                lines.append(cls.print_key_value(k, v, key_width=key_width))
+            lines.append("")
+
+        if extra_sections:
+            for title, items in extra_sections:
+                lines.append(cls.print_section(title, width=width))
+                lines.append(cls.print_list(items, bullet="• "))
+                lines.append("")
+
+        lines.append(cls.print_section("Status", width=width))
+        lines.append(status)
+        lines.append("")
+
+        lines.append(cls.print_section("Duration", width=width))
+        lines.append(f"{duration_sec:.2f} seconds")
+
+        return "\n".join(lines)
+
+
 def log_stage_banner(
     logger: logging.Logger,
     title: str,
     width: int = 60,
     char: str = "=",
 ) -> None:
-    """Format and log a visually distinct banner for major pipeline stages.
-
-    Args:
-        logger: Logger instance to output the banner.
-        title: Stage title to display in the banner.
-        width: Banner line width in characters.
-        char: Character to use for banner border.
-    """
-    banner_line = char * width
-    centered_title = title.strip().upper().center(width)
-    logger.info(f"\n{banner_line}\n\n{centered_title}\n\n{banner_line}\n")
+    """Format and log a visually distinct banner for major pipeline stages."""
+    banner_text = ConsoleFormatter.print_banner(title, width=width, char=char)
+    logger.info(f"\n{banner_text}\n")
 
 
 def log_stage_report(
@@ -168,69 +325,15 @@ def log_stage_report(
     duration_sec: float,
     extra_sections: list[tuple[str, list[str]]] | None = None,
 ) -> None:
-    """Format and log a structured report for a workflow stage.
-
-    Args:
-        logger: Logger instance to output the report.
-        stage_name: Name of the stage.
-        input_data: Key-value pairs describing input.
-        processing_steps: List of processing steps performed.
-        output_data: Key-value pairs describing output.
-        status: Stage status string ("SUCCESS", "FAILED", "SKIPPED").
-        duration_sec: Duration in seconds.
-        extra_sections: Additional custom sections (Title, List of lines).
-    """
-    lines = []
-    lines.append("====================================================")
-    lines.append(f"Stage: {stage_name}")
-    lines.append("====================================================")
-    lines.append("")
-
-    if input_data:
-        lines.append("Input")
-        lines.append("-----")
-        for label, val in input_data:
-            lines.append(f"{label}")
-            lines.append(f"{val}")
-        lines.append("")
-
-    if processing_steps:
-        lines.append("Processing")
-        lines.append("----------")
-        for step in processing_steps:
-            lines.append(f"{step}")
-        lines.append("")
-
-    if output_data:
-        lines.append("Output")
-        lines.append("------")
-        for label, val in output_data:
-            lines.append(f"{label}")
-            lines.append(f"{val}")
-        lines.append("")
-
-    if extra_sections:
-        for title, items in extra_sections:
-            lines.append(f"{title}")
-            lines.append("-" * max(len(title), 5))
-            for item in items:
-                item_str = str(item)
-                if not item_str.startswith("- ") and not item_str.startswith("• "):
-                    item_str = f"- {item_str}"
-                lines.append(item_str)
-            lines.append("")
-
-    lines.append("Status")
-    lines.append("------")
-    lines.append(f"{status}")
-    lines.append("")
-
-    lines.append("Duration")
-    lines.append("--------")
-    lines.append(f"{duration_sec:.2f} seconds")
-    lines.append("")
-
-    lines.append("----------------------------------------------------")
-
-    report_text = "\n".join(lines)
-    logger.info(f"\n{report_text}\n")
+    """Format and log a structured report for a workflow stage."""
+    report_text = ConsoleFormatter.print_stage_report(
+        stage_name=stage_name,
+        input_data=input_data,
+        processing_steps=processing_steps,
+        output_data=output_data,
+        status=status,
+        duration_sec=duration_sec,
+        extra_sections=extra_sections,
+    )
+    banner_text = ConsoleFormatter.print_banner(f"STAGE: {stage_name}")
+    logger.info(f"\n{banner_text}\n\n{report_text}\n")

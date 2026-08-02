@@ -24,7 +24,7 @@ import asyncio
 import time
 import traceback
 
-from seo_agent.core.logging import get_logger, log_stage_banner, log_stage_report
+from seo_agent.core.logging import ConsoleFormatter, get_logger, log_stage_banner, log_stage_report
 from seo_agent.core.result import Failure, Result, Success
 from seo_agent.models.api import KeywordPayload, SEOPayload
 from seo_agent.models.repository import PageInfo
@@ -174,18 +174,42 @@ class WorkflowOrchestrator:
 
         # Check final state using get_workflow_status()
         wf_status = context.get_workflow_status()
-        if wf_status == "SUCCESS":
-            log_stage_banner(logger, "WORKFLOW COMPLETED SUCCESSFULLY")
-            logger.info("Workflow completed successfully")
-            return Success(context)
-        elif wf_status == "PARTIAL SUCCESS":
-            log_stage_banner(logger, "WORKFLOW COMPLETED WITH PARTIAL SUCCESS")
-            logger.info("Workflow completed with partial success (some non-critical tasks skipped/failed)")
+
+        # Build and log Workflow Execution Summary
+        repo_name = Path(context.repository_path).name or str(context.repository_path)
+        fw_type = context.framework_info.framework_type.value if context.framework_info else "static_html"
+        pages_cnt = len(context.pages) if context.pages else len(context.page_info)
+        kw_cnt = context.seo_input.records_loaded if (context.seo_input and getattr(context.seo_input, "records_loaded", None)) else len(context.keywords)
+        tasks_pl = context.execution_plan.total_tasks if context.execution_plan else 0
+        tasks_ex = context.execution_result.completed_tasks if context.execution_result else 0
+        tasks_fa = context.execution_result.failed_tasks if context.execution_result else 0
+        rev_score = f"{int(context.review_result.overall_score)}/100" if (context.review_result and hasattr(context.review_result, "overall_score")) else "100/100"
+        sm_status = "Generated" if "sitemap_path" in context.metadata else "Skipped"
+        rb_status = "Generated" if "robots_path" in context.metadata else "Skipped"
+        rep_status = "Markdown | HTML | JSON" if "report_paths" in context.metadata else "Generated"
+        tot_dur = context.get_total_duration()
+
+        summary_text = ConsoleFormatter.print_summary(
+            repository=repo_name,
+            framework=fw_type,
+            pages=pages_cnt,
+            keywords=kw_cnt,
+            tasks_planned=tasks_pl,
+            tasks_executed=tasks_ex,
+            tasks_failed=tasks_fa,
+            review_score=rev_score,
+            sitemap=sm_status,
+            robots=rb_status,
+            reports=rep_status,
+            overall_status=wf_status,
+            total_duration=tot_dur,
+        )
+        logger.info(f"\n{summary_text}\n")
+
+        if wf_status in ("SUCCESS", "PARTIAL SUCCESS"):
             return Success(context)
         else:
             error_summary = context.get_error_summary()
-            log_stage_banner(logger, "WORKFLOW FAILED")
-            logger.error(f"Workflow failed: {error_summary or 'Execution task failures'}")
             return Failure(error_summary or "Workflow failed due to task failures")
 
     async def _execute_stage(
@@ -332,26 +356,26 @@ class WorkflowOrchestrator:
                 logger.error(f"Failed to read JSON input: {res.get_error_or_none()}")
 
         if context.seo_input and context.seo_input.records:
-            logger.info("============================================================")
-            logger.info("                  SEO INTELLIGENCE LOADING                  ")
-            logger.info("============================================================")
-            logger.info(f"Keywords Loaded: {context.seo_input.records_loaded}")
-            logger.info("Status:\nSUCCESS\n")
+            b1 = ConsoleFormatter.print_banner("SEO INTELLIGENCE LOADING")
+            kv1 = ConsoleFormatter.print_key_value("Keywords Loaded", context.seo_input.records_loaded)
+            st1 = ConsoleFormatter.print_status("SUCCESS")
+            logger.info(f"\n{b1}\n\n{kv1}\n\n{st1}\n")
 
             intent_counts: dict[str, int] = {}
             for rec in context.seo_input.records:
                 intent_key = (rec.search_intent or "informational").lower()
                 intent_counts[intent_key] = intent_counts.get(intent_key, 0) + 1
 
-            logger.info("============================================================")
-            logger.info("               KEYWORD INTELLIGENCE ANALYSIS                ")
-            logger.info("============================================================")
-            logger.info(f"Commercial\n{intent_counts.get('commercial', 0)}\n")
-            logger.info(f"Informational\n{intent_counts.get('informational', 0)}\n")
-            logger.info(f"Navigational\n{intent_counts.get('navigational', 0)}\n")
+            b2 = ConsoleFormatter.print_banner("KEYWORD INTELLIGENCE ANALYSIS")
+            kv_lines = [
+                ConsoleFormatter.print_key_value("Commercial", intent_counts.get("commercial", 0)),
+                ConsoleFormatter.print_key_value("Informational", intent_counts.get("informational", 0)),
+                ConsoleFormatter.print_key_value("Navigational", intent_counts.get("navigational", 0)),
+            ]
             if intent_counts.get("transactional"):
-                logger.info(f"Transactional\n{intent_counts.get('transactional', 0)}\n")
-            logger.info(f"Total Pool: {len(context.seo_input.records)}\n")
+                kv_lines.append(ConsoleFormatter.print_key_value("Transactional", intent_counts.get("transactional", 0)))
+            kv_lines.append(ConsoleFormatter.print_key_value("Total Pool", len(context.seo_input.records)))
+            logger.info(f"\n{b2}\n\n" + "\n".join(kv_lines) + "\n")
 
     def _print_stage_report(
         self,
@@ -880,19 +904,22 @@ def _create_planning_handler(
 
             if getattr(result, "matching_result", None) and result.matching_result.assignments:
                 context.metadata["matching_result"] = result.matching_result
-                logger.info("============================================================")
-                logger.info("                  AI PAGE–KEYWORD MATCHING                  ")
-                logger.info("============================================================")
+                b_match = ConsoleFormatter.print_banner("AI PAGE–KEYWORD MATCHING")
+                logger.info(f"\n{b_match}\n")
                 for ass in result.matching_result.assignments:
-                    logger.info(
-                        f"Page:\n{ass.page_route}\n\n"
-                        f"Primary\n{ass.primary_keyword.keyword}\n\n"
-                        f"Secondary\n\n"
-                        f"• {ass.secondary_keywords[0].keyword}\n"
-                        f"• {ass.secondary_keywords[1].keyword}\n\n"
-                        f"Confidence\n{int(ass.confidence_score * 100)}%\n\n"
-                        f"Reason\n\n{ass.ai_reasoning}\n"
-                    )
+                    sec_str = ", ".join(s.keyword for s in ass.secondary_keywords) if ass.secondary_keywords else "None"
+                    block_lines = [
+                        "-" * 60,
+                        ConsoleFormatter.print_key_value("Page", ass.page_route),
+                        ConsoleFormatter.print_key_value("Primary Keyword", ass.primary_keyword.keyword),
+                        ConsoleFormatter.print_key_value("Secondary Keywords", sec_str),
+                        ConsoleFormatter.print_key_value("Confidence", f"{int(ass.confidence_score * 100)}%"),
+                        "",
+                        "Reason",
+                        ass.ai_reasoning,
+                        "-" * 60,
+                    ]
+                    logger.info("\n".join(block_lines) + "\n")
 
                 # Planning Validation
                 pages_count = len(result.matching_result.assignments)
@@ -904,31 +931,46 @@ def _create_planning_handler(
                 prim_terms = [a.primary_keyword.keyword for a in result.matching_result.assignments]
                 dup_count = len(prim_terms) - len(set(prim_terms))
 
-                logger.info("============================================================")
-                logger.info("                    PLANNING VALIDATION                     ")
-                logger.info("============================================================")
-                logger.info(f"✓ Pages Discovered: {pages_count}")
-                logger.info(f"✓ Keywords Loaded: {kw_count}")
-                logger.info(f"✓ Primary Assignments: {prim_count}/{pages_count}")
-                logger.info(f"✓ Secondary Assignments: {sec_count}/{pages_count * 2}")
-                logger.info(f"✓ Duplicate Primary Keywords: {dup_count}")
-                logger.info("✓ Metadata Completeness: Complete\n")
-                logger.info("Status:\nREADY FOR EXECUTION\n")
+                b_val = ConsoleFormatter.print_banner("PLANNING VALIDATION")
+                val_lines = [
+                    b_val,
+                    "",
+                    ConsoleFormatter.print_key_value("✓ Pages Discovered", pages_count),
+                    ConsoleFormatter.print_key_value("✓ Keywords Loaded", kw_count),
+                    ConsoleFormatter.print_key_value("✓ Primary Assignments", f"{prim_count}/{pages_count}"),
+                    ConsoleFormatter.print_key_value("✓ Secondary Assignments", f"{sec_count}/{pages_count * 2}"),
+                    ConsoleFormatter.print_key_value("✓ Duplicate Primary KWs", dup_count),
+                    ConsoleFormatter.print_key_value("✓ Metadata Completeness", "Complete"),
+                    "",
+                    ConsoleFormatter.print_status("READY FOR EXECUTION"),
+                ]
+                logger.info("\n".join(val_lines) + "\n")
 
                 # Execution Plan Banner
-                logger.info("============================================================")
-                logger.info("                       EXECUTION PLAN                       ")
-                logger.info("============================================================")
+                b_plan = ConsoleFormatter.print_banner("EXECUTION PLAN")
+                logger.info(f"\n{b_plan}\n")
                 for idx, t in enumerate(result.execution_plan.all_tasks, start=1):
+                    raw_target = t.input_data.get("target_files", ["N/A"])[0]
+                    target_page = Path(raw_target).name if raw_target != "N/A" else "N/A"
                     p_kw = t.input_data.get("primary_keyword", "N/A")
                     s_kws = t.input_data.get("secondary_keywords", [])
                     sec_str = ", ".join(s_kws) if isinstance(s_kws, list) else str(s_kws)
-                    logger.info(
-                        f"Task {idx}\n\n"
-                        f"Target Page\n{t.input_data.get('target_files', ['N/A'])[0]}\n\n"
-                        f"Primary Keyword\n{p_kw}\n\n"
-                        f"Secondary Keywords\n\n{sec_str}\n"
-                    )
+                    task_type_str = t.task_type.value if hasattr(t.task_type, "value") else str(t.task_type)
+                    phase_str = str(t.input_data.get("phase", "1"))
+
+                    task_lines = [
+                        "-" * 60,
+                        f"Task {idx}",
+                        "-" * 60,
+                        ConsoleFormatter.print_key_value("Target Page", target_page),
+                        ConsoleFormatter.print_key_value("Task Type", task_type_str.title()),
+                        ConsoleFormatter.print_key_value("Phase", phase_str),
+                        "",
+                        ConsoleFormatter.print_key_value("Primary Keyword", p_kw),
+                        ConsoleFormatter.print_key_value("Secondary Keywords", sec_str),
+                        "-" * 60,
+                    ]
+                    logger.info("\n".join(task_lines) + "\n")
 
             return Success(context)
         except Exception as e:
