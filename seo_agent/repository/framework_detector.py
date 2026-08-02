@@ -170,7 +170,7 @@ class FrameworkDetector:
         if not root.exists():
             return Result.failure(f"Repository path does not exist: {root}")
 
-        self._logger.info(f"Detecting framework at {root}")
+        self._logger.debug(f"Detecting framework at {root}")
 
         try:
             # Detect framework type
@@ -190,7 +190,7 @@ class FrameworkDetector:
                 output_directory=metadata.get("output_dir"),
             )
 
-            self._logger.info(f"Framework detected: {framework_type.value} with {routing_strategy.value} routing")
+            self._logger.debug(f"Framework detected: {framework_type.value} with {routing_strategy.value} routing")
 
             return success(framework_info)
 

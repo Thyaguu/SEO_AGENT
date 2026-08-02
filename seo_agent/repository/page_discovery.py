@@ -80,7 +80,7 @@ class PageDiscovery:
         if not root.exists():
             return Result.failure(f"Repository path does not exist: {root}")
 
-        self._logger.info(f"discovering_pages: path={root}")
+        self._logger.debug(f"discovering_pages: path={root}")
 
         try:
             pages: list[DiscoveredPage] = []
@@ -125,7 +125,7 @@ class PageDiscovery:
                     unique_pages.append(p)
             pages = unique_pages
 
-            self._logger.info(f"pages_discovered: {len(pages)} pages")
+            self._logger.debug(f"pages_discovered: {len(pages)} pages")
             return success(pages)
 
         except Exception as e:

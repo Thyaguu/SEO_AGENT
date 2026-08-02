@@ -121,7 +121,7 @@ class Planner:
         self._keyword_selector = keyword_selector or KeywordSelector()
         self._task_planner = task_planner or TaskPlanner()
 
-        self._logger.info("planner_initialized")
+        self._logger.debug("planner_initialized")
 
     @classmethod
     def from_container(cls, container: Container) -> Planner:
@@ -145,7 +145,7 @@ class Planner:
             PlanningResult with execution plan and intermediate results.
         """
         start_time = datetime.utcnow()
-        self._logger.info(
+        self._logger.debug(
             f"planning_started: repository={input_data.repository_path}, "
             f"seed_keywords={len(input_data.seo_payload.seed_keywords)}"
         )
@@ -195,7 +195,7 @@ class Planner:
             duration_seconds=duration,
         )
 
-        self._logger.info(
+        self._logger.debug(
             f"planning_completed: duration_seconds={duration}, "
             f"total_tasks={execution_plan.total_tasks}, "
             f"phases={len(execution_plan.phases)}, "

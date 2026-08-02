@@ -132,7 +132,7 @@ class TaskPlanner:
         Returns:
             ExecutionPlan ready for the execution agent.
         """
-        self._logger.info(
+        self._logger.debug(
             f"generating_execution_plan: opportunities={len(repository_analysis.seo_opportunities)}, "
             f"selected_keywords={keyword_selection.total_selected_count}"
         )
@@ -159,7 +159,7 @@ class TaskPlanner:
             estimated_duration_seconds=self._estimate_duration(tasks) * 60,
         )
 
-        self._logger.info(
+        self._logger.debug(
             f"execution_plan_generated: total_tasks={len(tasks)}, phases={len(phases)}"
         )
 

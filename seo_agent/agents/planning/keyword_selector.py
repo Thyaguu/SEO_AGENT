@@ -151,7 +151,7 @@ class KeywordSelector:
         Returns:
             KeywordSelectionResult with prioritized keywords.
         """
-        self._logger.info(
+        self._logger.debug(
             f"selecting_keywords: seed_count={len(seo_payload.seed_keywords)}, "
             f"cluster_count={len(seo_payload.keyword_clusters)}, "
             f"competitor_count={len(seo_payload.competitors)}"
@@ -185,7 +185,7 @@ class KeywordSelector:
             priority_pages_keywords=priority_mapping,
         )
 
-        self._logger.info(
+        self._logger.debug(
             f"keyword_selection_complete: selected={len(selected)}, "
             f"rejected={len(rejected)}, duplicates={len(duplicates)}"
         )

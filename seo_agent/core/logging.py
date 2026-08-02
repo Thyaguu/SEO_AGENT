@@ -207,6 +207,33 @@ class ConsoleFormatter:
         return f"{sec}\n{status}"
 
     @classmethod
+    def print_table(
+        cls,
+        headers: list[str],
+        rows: list[list[str]],
+        col_widths: list[int] | None = None,
+        width: int = DEFAULT_WIDTH,
+    ) -> str:
+        """Format tabular data cleanly without wrapping lines."""
+        if not col_widths:
+            col_widths = []
+            for col_idx in range(len(headers)):
+                max_w = len(headers[col_idx])
+                for row in rows:
+                    if col_idx < len(row):
+                        max_w = max(max_w, len(str(row[col_idx])))
+                col_widths.append(max_w + 3)
+
+        header_line = "".join(f"{str(h):<{col_widths[i]}}" for i, h in enumerate(headers)).rstrip()
+        divider = "-" * width
+        row_lines = []
+        for row in rows:
+            r_str = "".join(f"{str(val):<{col_widths[i]}}" for i, val in enumerate(row)).rstrip()
+            row_lines.append(r_str)
+
+        return "\n".join([divider, header_line, divider] + row_lines + [divider])
+
+    @classmethod
     def print_summary(
         cls,
         repository: str,
@@ -215,7 +242,8 @@ class ConsoleFormatter:
         keywords: int,
         tasks_planned: int,
         tasks_executed: int,
-        tasks_failed: int,
+        files_modified: int,
+        files_skipped: int,
         review_score: str,
         sitemap: str,
         robots: str,
@@ -225,7 +253,7 @@ class ConsoleFormatter:
         width: int = DEFAULT_WIDTH,
         key_width: int = DEFAULT_KEY_WIDTH,
     ) -> str:
-        """Format the final workflow execution summary."""
+        """Format the final workflow execution summary dashboard."""
         banner = cls.print_banner("WORKFLOW EXECUTION SUMMARY", width=width, char="=")
         kv = cls.print_key_value
         lines = [
@@ -239,12 +267,13 @@ class ConsoleFormatter:
             "",
             kv("Tasks Planned", tasks_planned, key_width=key_width),
             kv("Tasks Executed", tasks_executed, key_width=key_width),
-            kv("Tasks Failed", tasks_failed, key_width=key_width),
+            kv("Files Modified", files_modified, key_width=key_width),
+            kv("Files Skipped", files_skipped, key_width=key_width),
             "",
             kv("Review Score", review_score, key_width=key_width),
             "",
             kv("Sitemap", sitemap, key_width=key_width),
-            kv("Robots.txt", robots, key_width=key_width),
+            kv("Robots", robots, key_width=key_width),
             "",
             kv("Reports", reports, key_width=key_width),
             "",
@@ -335,5 +364,4 @@ def log_stage_report(
         duration_sec=duration_sec,
         extra_sections=extra_sections,
     )
-    banner_text = ConsoleFormatter.print_banner(f"STAGE: {stage_name}")
-    logger.info(f"\n{banner_text}\n\n{report_text}\n")
+    logger.info(f"\n{report_text}\n")

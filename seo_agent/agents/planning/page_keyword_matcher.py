@@ -109,7 +109,7 @@ class PageKeywordMatcher:
         if not pages or not keyword_records:
             return KeywordMatchingResult()
 
-        logger.info(f"Starting AI Page-Keyword Semantic Matching for {len(pages)} page(s) and {len(keyword_records)} keyword(s)...")
+        logger.debug(f"Starting AI Page-Keyword Semantic Matching for {len(pages)} page(s) and {len(keyword_records)} keyword(s)...")
 
         # 1. Compute similarity matrix & scores
         page_scores: dict[int, list[tuple[float, int]]] = {}  # page_idx -> list of (score, kw_idx)
@@ -235,7 +235,7 @@ class PageKeywordMatcher:
             )
             assignments.append(assignment)
 
-            logger.info(
+            logger.debug(
                 f"[AI MATCHING] Page '{p_route}' -> Primary: '{prim_kw.keyword}' | "
                 f"Secondary: ['{sec1_kw.keyword}', '{sec2_kw.keyword}'] "
                 f"(Confidence: {int(assignment.confidence_score * 100)}%)"

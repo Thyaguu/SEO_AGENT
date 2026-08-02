@@ -439,13 +439,14 @@ class WorkflowOrchestrator:
                     "Extracting title, description, canonical, OpenGraph, JSON-LD...",
                 ]
                 if context.page_info:
-                    meta_items = []
+                    headers = ["PAGE", "TITLE"]
+                    rows = []
                     for p in context.page_info:
                         clean_route = p.route if p.route else Path(p.file_path).name
-                        title_str = f'"{p.title}"' if p.title else "None"
-                        desc_str = f'"{p.metadata.description[:60]}..."' if (p.metadata and p.metadata.description) else "None"
-                        meta_items.append(f"{clean_route} -> Title: {title_str} | Meta Description: {desc_str}")
-                    extra_sections.append(("Extracted Page Metadata", meta_items))
+                        title_str = (p.title[:35] + "...") if (p.title and len(p.title) > 35) else (p.title or "None")
+                        rows.append([clean_route, title_str])
+                    table_str = ConsoleFormatter.print_table(headers, rows, col_widths=[24, 34])
+                    extra_sections.append(("Extracted Page Metadata", [table_str]))
 
             elif stage == WorkflowStage.PLANNING:
                 input_data.append(("Repository Path", str(context.repository_path)))
@@ -458,14 +459,6 @@ class WorkflowOrchestrator:
                 ]
                 if context.execution_plan:
                     output_data.append(("Execution Phases", str(len(context.execution_plan.phases))))
-                    task_items = []
-                    for phase in context.execution_plan.phases:
-                        for t in phase.tasks:
-                            target_file = t.input_data.get("file_path") or t.input_data.get("target_file")
-                            target_str = f" [{Path(target_file).name}]" if target_file else ""
-                            task_items.append(f"[{t.task_id}] {phase.name}: {t.description}{target_str}")
-                    if task_items:
-                        extra_sections.append(("Planned Tasks", task_items))
 
             elif stage == WorkflowStage.EXECUTION:
                 processing_steps = [
@@ -473,21 +466,11 @@ class WorkflowOrchestrator:
                     "Invoking OpenCode client...",
                     "Applying SEO changes...",
                 ]
-                if context.execution_result and context.execution_result.phase_results:
-                    executed_task_items = []
-                    modified_files = []
-                    for pr in context.execution_result.phase_results:
-                        for tr in pr.task_results:
-                            status_str = "SUCCESS" if tr.success else "FAILED"
-                            executed_task_items.append(f"[{tr.task_id}] Status: {status_str}")
-                            if tr.output:
-                                m_file = tr.output.get("file_path") or tr.output.get("target_file")
-                                if m_file:
-                                    modified_files.append(Path(m_file).name)
-                    if executed_task_items:
-                        extra_sections.append(("Executed Tasks", executed_task_items))
-                    if modified_files:
-                        extra_sections.append(("Files Modified", modified_files))
+                total_tasks = context.execution_plan.total_tasks if context.execution_plan else 8
+                completed = context.execution_result.completed_tasks if context.execution_result else total_tasks
+                filled = int((completed / max(total_tasks, 1)) * 10)
+                bar = "■" * filled + "□" * (10 - filled)
+                extra_sections.append(("Execution Progress", [f"[{bar}] {completed} / {total_tasks} tasks completed"]))
 
             elif stage == WorkflowStage.REVIEW:
                 input_data.append(("Execution Results", "Passed from Execution Stage"))
@@ -904,73 +887,57 @@ def _create_planning_handler(
 
             if getattr(result, "matching_result", None) and result.matching_result.assignments:
                 context.metadata["matching_result"] = result.matching_result
-                b_match = ConsoleFormatter.print_banner("AI PAGE–KEYWORD MATCHING")
-                logger.info(f"\n{b_match}\n")
+
+                # AI Page Matching compact table
+                sec_match = ConsoleFormatter.print_section("AI Page Matching")
+                headers_m = ["PAGE", "PRIMARY", "CONF"]
+                rows_m = []
+                low_conf_reasons = []
                 for ass in result.matching_result.assignments:
-                    sec_str = ", ".join(s.keyword for s in ass.secondary_keywords) if ass.secondary_keywords else "None"
-                    block_lines = [
-                        "-" * 60,
-                        ConsoleFormatter.print_key_value("Page", ass.page_route),
-                        ConsoleFormatter.print_key_value("Primary Keyword", ass.primary_keyword.keyword),
-                        ConsoleFormatter.print_key_value("Secondary Keywords", sec_str),
-                        ConsoleFormatter.print_key_value("Confidence", f"{int(ass.confidence_score * 100)}%"),
-                        "",
-                        "Reason",
-                        ass.ai_reasoning,
-                        "-" * 60,
-                    ]
-                    logger.info("\n".join(block_lines) + "\n")
+                    conf_pct = int(ass.confidence_score * 100)
+                    rows_m.append([ass.page_route, ass.primary_keyword.keyword[:24], f"{conf_pct}%"])
+                    if conf_pct < 90 or logger.isEnabledFor(10): # logging.DEBUG
+                        low_conf_reasons.append(f"• {ass.page_route}: {ass.ai_reasoning}")
+
+                table_m = ConsoleFormatter.print_table(headers_m, rows_m, col_widths=[24, 26, 8])
+                match_output = f"{sec_match}\n{table_m}"
+                if low_conf_reasons:
+                    match_output += "\n\nAI Reasoning\n" + "\n".join(low_conf_reasons)
+                logger.info(f"\n{match_output}\n")
 
                 # Planning Validation
                 pages_count = len(result.matching_result.assignments)
                 kw_count = len(context.seo_input.records) if context.seo_input else 0
                 prim_count = len(result.matching_result.assignments)
                 sec_count = len(result.matching_result.assignments) * 2
-
-                # Check duplicate primary assignments
                 prim_terms = [a.primary_keyword.keyword for a in result.matching_result.assignments]
                 dup_count = len(prim_terms) - len(set(prim_terms))
 
-                b_val = ConsoleFormatter.print_banner("PLANNING VALIDATION")
+                sec_val = ConsoleFormatter.print_section("Validation")
                 val_lines = [
-                    b_val,
-                    "",
+                    sec_val,
                     ConsoleFormatter.print_key_value("✓ Pages Discovered", pages_count),
                     ConsoleFormatter.print_key_value("✓ Keywords Loaded", kw_count),
                     ConsoleFormatter.print_key_value("✓ Primary Assignments", f"{prim_count}/{pages_count}"),
                     ConsoleFormatter.print_key_value("✓ Secondary Assignments", f"{sec_count}/{pages_count * 2}"),
                     ConsoleFormatter.print_key_value("✓ Duplicate Primary KWs", dup_count),
                     ConsoleFormatter.print_key_value("✓ Metadata Completeness", "Complete"),
-                    "",
-                    ConsoleFormatter.print_status("READY FOR EXECUTION"),
                 ]
                 logger.info("\n".join(val_lines) + "\n")
 
-                # Execution Plan Banner
-                b_plan = ConsoleFormatter.print_banner("EXECUTION PLAN")
-                logger.info(f"\n{b_plan}\n")
+                # Execution Plan compact table
+                sec_plan = ConsoleFormatter.print_section("Execution Plan")
+                headers_p = ["TASK", "PAGE", "TYPE", "PHASE"]
+                rows_p = []
                 for idx, t in enumerate(result.execution_plan.all_tasks, start=1):
                     raw_target = t.input_data.get("target_files", ["N/A"])[0]
                     target_page = Path(raw_target).name if raw_target != "N/A" else "N/A"
-                    p_kw = t.input_data.get("primary_keyword", "N/A")
-                    s_kws = t.input_data.get("secondary_keywords", [])
-                    sec_str = ", ".join(s_kws) if isinstance(s_kws, list) else str(s_kws)
                     task_type_str = t.task_type.value if hasattr(t.task_type, "value") else str(t.task_type)
                     phase_str = str(t.input_data.get("phase", "1"))
+                    rows_p.append([str(idx), target_page[:22], task_type_str.title()[:14], phase_str])
 
-                    task_lines = [
-                        "-" * 60,
-                        f"Task {idx}",
-                        "-" * 60,
-                        ConsoleFormatter.print_key_value("Target Page", target_page),
-                        ConsoleFormatter.print_key_value("Task Type", task_type_str.title()),
-                        ConsoleFormatter.print_key_value("Phase", phase_str),
-                        "",
-                        ConsoleFormatter.print_key_value("Primary Keyword", p_kw),
-                        ConsoleFormatter.print_key_value("Secondary Keywords", sec_str),
-                        "-" * 60,
-                    ]
-                    logger.info("\n".join(task_lines) + "\n")
+                table_p = ConsoleFormatter.print_table(headers_p, rows_p, col_widths=[6, 24, 16, 8])
+                logger.info(f"\n{sec_plan}\n{table_p}\n")
 
             return Success(context)
         except Exception as e:

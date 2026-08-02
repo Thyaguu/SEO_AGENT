@@ -172,7 +172,7 @@ class ExecutionAgent:
                 )
             )
 
-        self._logger.info(
+        self._logger.debug(
             "Starting execution",
             extra={
                 "request_id": plan.request_id,
@@ -194,7 +194,7 @@ class ExecutionAgent:
         metadata_updates: list[Metadata] = []
 
         for phase in plan.phases:
-            self._logger.info(
+            self._logger.debug(
                 "Executing phase",
                 extra={
                     "phase_id": phase.phase_id,
@@ -251,7 +251,7 @@ class ExecutionAgent:
             errors=tuple(all_errors),
         )
 
-        self._logger.info(
+        self._logger.debug(
             "Execution completed",
             extra={
                 "request_id": plan.request_id,

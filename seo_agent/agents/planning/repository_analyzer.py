@@ -225,7 +225,7 @@ class RepositoryAnalyzer:
         # otherwise fall back to repository_info.pages
         pages = page_info if page_info else repository_info.pages
 
-        self._logger.info(
+        self._logger.debug(
             f"analyzing_repository: path={repository_info.root_path}, page_count={len(pages)}"
         )
 
@@ -264,7 +264,7 @@ class RepositoryAnalyzer:
             pages_needing_work=pages_needing_work,
         )
 
-        self._logger.info(
+        self._logger.debug(
             f"repository_analysis_complete: opportunities={len(seo_opportunities)}, "
             f"missing_metadata={len(missing_metadata)}, constraints={len(constraints)}"
         )

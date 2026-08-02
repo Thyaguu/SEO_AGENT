@@ -133,12 +133,12 @@ class RepositoryScanner:
 
         options = options or RepositoryScanOptions()
 
-        self._logger.info(f"Starting_repository_scan: path={root}")
+        self._logger.debug(f"Starting_repository_scan: path={root}")
 
         try:
             # Scan files
             files = list(self._scan_files(root, options))
-            self._logger.info(f"files_scanned: count={len(files)}")
+            self._logger.debug(f"files_scanned: count={len(files)}")
 
             # Detect sitemap
             sitemap = self._detect_sitemap(root)
@@ -168,7 +168,7 @@ class RepositoryScanner:
                 analyzed_at=datetime.utcnow(),
             )
 
-            self._logger.info(
+            self._logger.debug(
                 f"repository_scan_complete: files={len(files)}, "
                 f"has_sitemap={sitemap.exists if sitemap else False}, "
                 f"has_robots={robots.exists if robots else False}"
