@@ -269,7 +269,7 @@ class ConsoleFormatter:
             kv("Tasks Planned", tasks_planned, key_width=key_width),
             kv("Tasks Executed", tasks_executed, key_width=key_width),
             kv("Tasks Failed", tasks_failed, key_width=key_width),
-            kv("Files Modified", files_modified or tasks_executed, key_width=key_width),
+            kv("Files Modified", files_modified, key_width=key_width),
             kv("Files Skipped", files_skipped, key_width=key_width),
             "",
             kv("Review Score", review_score, key_width=key_width),

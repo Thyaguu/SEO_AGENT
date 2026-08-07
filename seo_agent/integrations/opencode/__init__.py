@@ -24,6 +24,11 @@ from seo_agent.integrations.opencode.adapter import (
     PageGenerationResult,
     OpenCodeExecutionResult,
 )
+from seo_agent.integrations.opencode.server import (
+    ensure_opencode_server,
+    check_opencode_health,
+    start_opencode_server,
+)
 
 __all__ = [
     # Enums
@@ -49,4 +54,8 @@ __all__ = [
     "FileEditResult",
     "PageGenerationResult",
     "OpenCodeExecutionResult",
+    # Server
+    "ensure_opencode_server",
+    "check_opencode_health",
+    "start_opencode_server",
 ]

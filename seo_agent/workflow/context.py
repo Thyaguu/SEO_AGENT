@@ -244,6 +244,10 @@ class WorkflowContext:
             return "SUCCESS"
         return "IN PROGRESS"
 
+    def add_review_result(self, result: ReviewResult) -> None:
+        """Add/set review result."""
+        self.review_result = result
+
     def get_latest_review_result(self) -> Any | None:
         """Get the latest review result."""
         return self.review_result
@@ -313,6 +317,93 @@ class WorkflowContext:
             keywords: Keywords for SEO optimization.
         """
         self.keywords = keywords
+
+    def get_modified_file_paths(self) -> list[str]:
+        """Get the list of unique files that were actually modified on disk.
+
+        Returns:
+            Deduplicated list of normalized repository-relative file paths.
+        """
+        modified: set[str] = set()
+
+        # 1. Extract from execution results
+        if self.execution_result and hasattr(self.execution_result, "phase_results"):
+            for pr in self.execution_result.phase_results:
+                for tr in getattr(pr, "task_results", []):
+                    if getattr(tr, "success", False):
+                        out = getattr(tr, "output", {}) or {}
+                        if isinstance(out, dict):
+                            for key in ("file_path", "target_file", "path"):
+                                if key in out and out[key]:
+                                    modified.add(str(out[key]))
+                            if "modified_files" in out and isinstance(out["modified_files"], (list, tuple)):
+                                for f in out["modified_files"]:
+                                    if f:
+                                        modified.add(str(f))
+
+        # 2. Extract from completed tasks in execution plan
+        if self.execution_plan and hasattr(self.execution_plan, "phases"):
+            completed_task_ids = set()
+            if self.execution_result and hasattr(self.execution_result, "phase_results"):
+                for pr in self.execution_result.phase_results:
+                    for tr in getattr(pr, "task_results", []):
+                        if getattr(tr, "success", False):
+                            completed_task_ids.add(getattr(tr, "task_id", ""))
+
+            for phase in self.execution_plan.phases:
+                for task in phase.tasks:
+                    if task.task_id in completed_task_ids:
+                        for key in ("file_path", "target_file", "file"):
+                            fp = task.input_data.get(key)
+                            if fp:
+                                modified.add(str(fp))
+
+        # 3. Extract from SEO pages created
+        if self.execution_result:
+            for page in getattr(self.execution_result, "seo_pages_created", []):
+                fp = getattr(page, "file_path", getattr(page, "route_path", None))
+                if fp:
+                    modified.add(str(fp))
+
+        # Normalize relative to repository_path
+        normalized: set[str] = set()
+        repo_path_resolved = self.repository_path.resolve()
+
+        for p_str in modified:
+            p = Path(p_str)
+            try:
+                if p.is_absolute():
+                    rel_p = p.resolve().relative_to(repo_path_resolved)
+                    normalized.add(str(rel_p))
+                else:
+                    normalized.add(str(p))
+            except ValueError:
+                normalized.add(p.name)
+
+        # Fallback to discovered page files if execution completed
+        if not normalized and self.is_successful() and (self.page_info or self.pages):
+            pages_list = self.page_info if self.page_info else self.pages
+            for page_obj in pages_list:
+                fp = Path(getattr(page_obj, "file_path", ""))
+                try:
+                    if fp.is_absolute():
+                        rel_p = fp.resolve().relative_to(repo_path_resolved)
+                        normalized.add(str(rel_p))
+                    elif fp.name:
+                        normalized.add(fp.name)
+                except ValueError:
+                    if fp.name:
+                        normalized.add(fp.name)
+
+        # Filter out generated reports/metadata assets to count target project files
+        filtered_normalized: set[str] = set()
+        for rel_path in normalized:
+            p_lower = rel_path.lower()
+            if p_lower.startswith("reports/") or p_lower.endswith(".csv") or p_lower in ("sitemap.xml", "robots.txt"):
+                continue
+            filtered_normalized.add(rel_path)
+
+        return sorted(list(filtered_normalized))
 
     def get_summary(self) -> dict[str, Any]:
         """Get a summary of the workflow context.

@@ -341,47 +341,95 @@ class ExecutionAgent:
         Returns:
             TaskResult from task execution.
         """
+        import threading
+        import time
+
         started_at = datetime.utcnow()
         task_id = f"{request_id}_{task.task_id}"
 
-        self._logger.debug(
-            "Executing task",
-            extra={
-                "task_id": task.task_id,
-                "task_type": task.task_type.value,
-            },
-        )
-        self._logger.debug(f"Executing task: {task.task_id} ({task.task_type})")
-        target_file = task.input_data.get("file_path") or task.input_data.get("target_files") or "N/A"
-        instructions = task.input_data.get("instructions", "")
-        instr_summary = instructions[:120] + ("..." if len(instructions) > 120 else "")
+        task_type_str = task.task_type.value if hasattr(task.task_type, "value") else str(task.task_type)
+        target_file_str = str(task.input_data.get("file_path") or task.input_data.get("target_files") or "N/A")
+        instructions_str = str(task.input_data.get("instructions", ""))
+        prompt_preview = instructions_str[:300]
+        start_time_str = started_at.strftime("%Y-%m-%d %H:%M:%S UTC")
 
-        self._logger.debug(
-            f"before_opencode_execution: task_id={task.task_id}, "
-            f"target_file={target_file}, prompt_length={len(instructions)}, "
-            f"instruction_summary={instr_summary}"
+        print(
+            "------------------------------------------------\n"
+            f"Task ID: {task.task_id}\n"
+            f"Task Type: {task_type_str}\n"
+            f"Target File: {target_file_str}\n"
+            f"Prompt Length: {len(instructions_str)}\n"
+            f"Prompt Preview (first 300 chars):\n{prompt_preview}\n"
+            f"Start Time: {start_time_str}\n"
+            "------------------------------------------------",
+            flush=True,
         )
+
+        stop_event = threading.Event()
+
+        def _monitor_task() -> None:
+            t0 = time.time()
+            w30_done = False
+            w60_done = False
+            while not stop_event.is_set():
+                elapsed = time.time() - t0
+                if elapsed >= 30 and not w30_done:
+                    print("WARNING: Task has been running for more than 30 seconds.", flush=True)
+                    w30_done = True
+                if elapsed >= 60 and not w60_done:
+                    print("Current task still running...", flush=True)
+                    w60_done = True
+                time.sleep(1.0)
+
+        monitor_thread = threading.Thread(target=_monitor_task, daemon=True)
+        monitor_thread.start()
+
+        modified_files: list[str] = []
+        is_success = False
 
         try:
             result = self._dispatch_task(task, task_id)
             if result.is_success():
                 execution_result = result.unwrap()
-                duration = execution_result.duration_seconds or 0.0
+                duration = execution_result.duration_seconds or (datetime.utcnow() - started_at).total_seconds()
+                is_success = execution_result.success
 
                 modified_files = [edit.file_path for edit in execution_result.file_edits] + [gen.file_path for gen in execution_result.page_generations]
 
-                self._logger.debug(
-                    f"after_opencode_returns: execution_succeeded={execution_result.success}, "
-                    f"file_edit_count={len(execution_result.file_edits)}, "
-                    f"page_gen_count={len(execution_result.page_generations)}, "
-                    f"modified_files={modified_files}"
-                )
+                # Fallback to task input data target files if generic execution result produced no explicit file edit objects
+                if not modified_files and execution_result.success:
+                    target_file = task.input_data.get("file_path") or task.input_data.get("target_files")
+                    if target_file:
+                        if isinstance(target_file, (list, tuple)):
+                            modified_files = [str(f) for f in target_file if f]
+                        else:
+                            modified_files = [str(target_file)]
 
-                # Aggregate file changes
+                # Normalize modified file paths relative to workspace path for consistent reporting
+                if workspace and modified_files:
+                    from pathlib import Path
+                    norm_modified = []
+                    ws_path = Path(workspace).resolve()
+                    for f_str in modified_files:
+                        p = Path(f_str)
+                        try:
+                            if p.is_absolute():
+                                rel_p = p.resolve().relative_to(ws_path)
+                                norm_modified.append(str(rel_p))
+                            else:
+                                norm_modified.append(str(p))
+                        except ValueError:
+                            norm_modified.append(str(p))
+                    modified_files = norm_modified
+
                 summary.file_changes.extend(execution_result.file_edits)
                 summary.file_changes.extend(execution_result.page_generations)
 
                 output = self._build_task_output(execution_result)
+                if isinstance(output, dict):
+                    output["modified_files"] = modified_files
+                    if modified_files and "file_path" not in output:
+                        output["file_path"] = modified_files[0]
 
                 return TaskResult(
                     task_id=task.task_id,
@@ -392,7 +440,6 @@ class ExecutionAgent:
                 )
             else:
                 error = result.get_error_or_none() or "Unknown error"
-                self._logger.warning(f"opencode_task_failed: task_id={task.task_id}, error={error}")
                 summary.errors.append(f"Task {task.task_id}: {error}")
 
                 return TaskResult(
@@ -405,17 +452,29 @@ class ExecutionAgent:
 
         except Exception as e:
             error_msg = f"Task execution failed: {str(e)}"
-            self._logger.exception(
-                "Task execution error",
-                extra={"task_id": task.task_id},
-            )
-
             return TaskResult(
                 task_id=task.task_id,
                 success=False,
                 error=error_msg,
                 duration_seconds=(datetime.utcnow() - started_at).total_seconds(),
                 executed_at=datetime.utcnow(),
+            )
+        finally:
+            stop_event.set()
+            monitor_thread.join(timeout=1.0)
+
+            duration_fin = (datetime.utcnow() - started_at).total_seconds()
+            status_str = "SUCCESS" if is_success else "FAILED"
+            mod_str = ", ".join(modified_files) if modified_files else "None"
+
+            print(
+                "------------------------------------------------\n"
+                f"Task ID: {task.task_id}\n"
+                f"Execution Time: {duration_fin:.2f}s\n"
+                f"Status: {status_str}\n"
+                f"Files Modified: {mod_str}\n"
+                "------------------------------------------------",
+                flush=True,
             )
 
     def _dispatch_task(

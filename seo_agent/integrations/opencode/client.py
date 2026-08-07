@@ -81,6 +81,8 @@ class OpenCodeClient:
         self._timeout = timeout
         self._default_model = default_model
         self._opencode_bin = self._resolve_opencode_binary()
+        self._session_id: str | None = None
+        self._session_workspace_path: str | None = None
         logger.debug(
             f"Initialized OpenCode client with attach URL: {base_url}, "
             f"binary: {self._opencode_bin}"
@@ -334,6 +336,73 @@ class OpenCodeClient:
             completed_at=completed_at,
         )
 
+    def _is_session_valid(self, session_id: str) -> bool:
+        """Check if a session ID exists and is active on the OpenCode server."""
+        import urllib.request
+        try:
+            url = f"{self._base_url}/session/{session_id}"
+            req = urllib.request.Request(url, method="GET")
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
+
+    def _create_session(self, workspace_path: str | None = None) -> str:
+        """Create a new OpenCode session on the server."""
+        import urllib.request
+        import json
+
+        logger.info("[OpenCode]\nCreating session...")
+        url = f"{self._base_url}/session"
+        payload: dict[str, Any] = {}
+        if workspace_path:
+            payload["directory"] = workspace_path
+
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data,
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+                session_id = result.get("id")
+                if not session_id:
+                    raise OpenCodeClientError(
+                        "Failed to obtain session ID from OpenCode server response"
+                    )
+                logger.info(f"[OpenCode] Created new session: {session_id}")
+                return session_id
+        except Exception as e:
+            logger.error(f"[OpenCode] Failed to create session on server: {e}")
+            raise OpenCodeClientError(f"Failed to create OpenCode session: {e}")
+
+    def get_or_create_session(self, workspace_path: str | None = None) -> str:
+        """Get an existing valid active session or create a new session.
+
+        Ensures:
+        - Automatically creates a new session if repo path changes.
+        - Validates session state before reuse.
+        - Caches only valid sessions.
+        """
+        if (
+            self._session_id
+            and self._session_workspace_path == workspace_path
+            and self._is_session_valid(self._session_id)
+        ):
+            logger.info("[OpenCode]\nReusing existing session...")
+            return self._session_id
+
+        if self._session_id and not self._is_session_valid(self._session_id):
+            logger.info("[OpenCode]\nSession expired. Creating a new session...")
+
+        self._session_id = self._create_session(workspace_path)
+        self._session_workspace_path = workspace_path
+        return self._session_id
+
     def execute(self, request: OpenCodeRequest) -> Result[OpenCodeResponse, str]:
         """Execute an OpenCode request via CLI subprocess.
 
@@ -345,10 +414,13 @@ class OpenCodeClient:
         """
         logger.info(f"Executing OpenCode request: {request.request_id}")
 
+        session_id = self.get_or_create_session(request.workspace_path)
+
         cmd = [
             self._opencode_bin,
             "run",
             "--attach", self._base_url,
+            "--session", session_id,
             "--format", "json",
             request.instructions,
         ]
@@ -369,11 +441,38 @@ class OpenCodeClient:
         try:
             proc = subprocess.run(
                 cmd,
+                input="",
                 capture_output=True,
                 text=True,
                 timeout=self._timeout,
                 cwd=cwd,
             )
+
+            # Detect session not found error and recover automatically
+            combined_output = f"{proc.stderr or ''}\n{proc.stdout or ''}"
+            if proc.returncode != 0 and "session not found" in combined_output.lower():
+                logger.warning("[OpenCode]\nSession expired. Creating a new session...")
+                logger.info("[OpenCode]\nRetrying execution with fresh session...")
+                self._session_id = None
+                self._session_workspace_path = None
+
+                fresh_session_id = self.get_or_create_session(request.workspace_path)
+                cmd = [
+                    self._opencode_bin,
+                    "run",
+                    "--attach", self._base_url,
+                    "--session", fresh_session_id,
+                    "--format", "json",
+                    request.instructions,
+                ]
+                proc = subprocess.run(
+                    cmd,
+                    input="",
+                    capture_output=True,
+                    text=True,
+                    timeout=self._timeout,
+                    cwd=cwd,
+                )
 
             logger.debug(
                 f"OpenCode Completed: request_id={request.request_id}, "

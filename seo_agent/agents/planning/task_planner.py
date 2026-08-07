@@ -776,14 +776,47 @@ class TaskPlanner:
             )
 
         elif template.task_type == TaskType.INTERNAL_LINKING:
+            import os
             source = parsed.get("source", target_raw)
             resolved_source = self._resolve_target_file(source, repository_path)
             abs_source_path = str(repository_path / resolved_source)
             base["target_files"] = [resolved_source]
             base["file_path"] = abs_source_path
+
+            # Define standard candidate pages and anchor text
+            standard_candidates = [
+                ("solutions.html", "AI Recruitment Solutions"),
+                ("pricing.html", "Pricing & Plans"),
+                ("about.html", "About Us"),
+                ("contact.html", "Contact Us"),
+                ("index.html", "Home"),
+            ]
+
+            source_dir = os.path.dirname(resolved_source)
+            norm_source = os.path.normpath(resolved_source)
+
+            # Build pre-computed HTML link tags in Python
+            link_tags: list[str] = []
+            for target_rel, anchor in standard_candidates:
+                if os.path.normpath(target_rel) == norm_source:
+                    continue
+                rel_url = os.path.relpath(target_rel, source_dir) if source_dir else target_rel
+                link_tags.append(f'<a href="{rel_url}">{anchor}</a>')
+                if len(link_tags) >= 2:
+                    break
+
+            base["precomputed_links"] = link_tags
+            links_formatted = "\n".join(f"- {link}" for link in link_tags)
+
             base["instructions"] = (
-                f"Add internal links in the HTML file '{resolved_source}' (located at '{abs_source_path}') "
-                f"linking to relevant target pages to improve site architecture and navigation."
+                f"Insert the following pre-computed internal links into the HTML file '{resolved_source}' (located at '{abs_source_path}'):\n\n"
+                f"Supplied Links to Insert:\n{links_formatted}\n\n"
+                f"Strict Execution Rules:\n"
+                f"1. Modify ONLY the file '{resolved_source}'. Do NOT search, list, inspect, or read any other files in the workspace.\n"
+                f"2. Insert the supplied link tags into appropriate text paragraphs within the <body> of '{resolved_source}'.\n"
+                f"3. Do NOT search for target pages or determine relevant pages; use ONLY the exact supplied links above.\n"
+                f"4. Do NOT rewrite or remove existing page layout, CSS, or tags.\n"
+                f"5. Apply the edit and stop execution immediately."
             )
 
         elif template.task_type == TaskType.SEO_PAGE_GENERATION:

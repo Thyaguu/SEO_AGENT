@@ -142,11 +142,16 @@ def _context_to_response(
         )
         stages.append(stage_result)
 
-    # Build file changes from execution result
-    # Derive from current ExecutionResult fields: seo_pages_created,
-    # seo_pages_removed, and metadata_updates (no `changes` field exists).
+    # Build file changes from execution result and unique modified files
     file_changes: list[FileChange] = []
-    if context.execution_result:
+    unique_files = context.get_modified_file_paths()
+    if unique_files:
+        for f_path in unique_files:
+            file_changes.append(FileChange(
+                file_path=f_path,
+                change_type="modified",
+            ))
+    elif context.execution_result:
         for page in context.execution_result.seo_pages_created:
             file_changes.append(FileChange(
                 file_path=page.file_path,
@@ -156,12 +161,6 @@ def _context_to_response(
             file_changes.append(FileChange(
                 file_path=file_path,
                 change_type="deleted",
-            ))
-        for metadata in context.execution_result.metadata_updates:
-            # Metadata has no file_path; use canonical_url as a stable identifier.
-            file_changes.append(FileChange(
-                file_path=metadata.canonical_url,
-                change_type="modified",
             ))
 
     # Build pages generated from execution result

@@ -183,6 +183,8 @@ class WorkflowOrchestrator:
         tasks_pl = context.execution_plan.total_tasks if context.execution_plan else 0
         tasks_ex = context.execution_result.completed_tasks if context.execution_result else 0
         tasks_fa = context.execution_result.failed_tasks if context.execution_result else 0
+        unique_mod_files = context.get_modified_file_paths()
+        files_mod_cnt = len(unique_mod_files)
         rev_score = f"{int(context.review_result.overall_score)}/100" if (context.review_result and hasattr(context.review_result, "overall_score")) else "100/100"
         sm_status = "Generated" if "sitemap_path" in context.metadata else "Skipped"
         rb_status = "Generated" if "robots_path" in context.metadata else "Skipped"
@@ -197,6 +199,7 @@ class WorkflowOrchestrator:
             tasks_planned=tasks_pl,
             tasks_executed=tasks_ex,
             tasks_failed=tasks_fa,
+            files_modified=files_mod_cnt,
             review_score=rev_score,
             sitemap=sm_status,
             robots=rb_status,
