@@ -35,7 +35,7 @@ The system uses a strict **two-agent model**:
                   ▼
   ┌─────────────────────────────────┐
   │  Reporting & Output             │
-  │  Markdown │ HTML │ JSON         │
+  │  Markdown │ JSON                 │
   └─────────────────────────────────┘
 ```
 
@@ -93,7 +93,7 @@ OPENCODE_base_url=http://127.0.0.1:4096
 6. Executes each task in an isolated OpenCode session
 7. Reviews all changes and calculates a quality score
 8. Generates sitemap.xml and robots.txt
-9. Produces reports in Markdown, HTML, and JSON
+9. Produces reports in Markdown and JSON
 10. Prints a summary dashboard
 
 ### CLI Options
@@ -126,7 +126,7 @@ Files Skipped          : 0
 Review Score           : 100/100
 Sitemap                : Generated
 Robots                 : Generated
-Reports                : Markdown HTML JSON
+Reports                : Markdown | JSON
 Overall Status         : SUCCESS
 Total Duration         : 143.63 seconds
 ============================================================

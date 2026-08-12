@@ -188,7 +188,7 @@ class WorkflowOrchestrator:
         rev_score = f"{int(context.review_result.overall_score)}/100" if (context.review_result and hasattr(context.review_result, "overall_score")) else "100/100"
         sm_status = "Generated" if "sitemap_path" in context.metadata else "Skipped"
         rb_status = "Generated" if "robots_path" in context.metadata else "Skipped"
-        rep_status = "Markdown | HTML | JSON" if "report_paths" in context.metadata else "Generated"
+        rep_status = "Markdown | JSON" if "report_paths" in context.metadata else "Generated"
         tot_dur = context.get_total_duration()
 
         summary_text = ConsoleFormatter.print_summary(

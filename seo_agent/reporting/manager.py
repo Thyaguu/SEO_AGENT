@@ -49,7 +49,6 @@ class ReportManager:
         prefix = f"{timestamp_str}_execution_report"
 
         md_path = reports_dir / f"{prefix}.md"
-        html_path = reports_dir / f"{prefix}.html"
         json_path = reports_dir / f"{prefix}.json"
         index_path = reports_dir / "index.json"
 
@@ -58,12 +57,10 @@ class ReportManager:
 
         # Render formats
         md_content = self.md_renderer.render(report_model)
-        html_content = self.html_renderer.render(report_model)
         json_content = self.json_renderer.render(report_model)
 
         # Write files
         md_path.write_text(md_content, encoding="utf-8")
-        html_path.write_text(html_content, encoding="utf-8")
         json_path.write_text(json_content, encoding="utf-8")
 
         logger.info(f"Execution Intelligence Reports saved to: {reports_dir}")
@@ -76,14 +73,12 @@ class ReportManager:
             repo_path=str(repo_path),
             status=report_model.executive_summary.status,
             duration=report_model.executive_summary.duration_seconds,
-            html_rel=html_path.name,
             md_rel=md_path.name,
             json_rel=json_path.name,
         )
 
         return {
             "markdown": str(md_path),
-            "html": str(html_path),
             "json": str(json_path),
             "index": str(index_path),
         }
@@ -96,9 +91,9 @@ class ReportManager:
         repo_path: str,
         status: str,
         duration: float,
-        html_rel: str,
         md_rel: str,
         json_rel: str,
+        html_rel: str | None = None,
     ) -> None:
         """Maintain and update the reports/index.json history file."""
         entries: list[dict[str, Any]] = []
@@ -119,10 +114,11 @@ class ReportManager:
             "repository_path": repo_path,
             "status": status,
             "duration_seconds": duration,
-            "html_report": html_rel,
             "markdown_report": md_rel,
             "json_report": json_rel,
         }
+        if html_rel:
+            new_entry["html_report"] = html_rel
 
         entries.insert(0, new_entry)
 

@@ -248,7 +248,7 @@ class ConsoleFormatter:
         review_score: str = "100/100",
         sitemap: str = "Generated",
         robots: str = "Generated",
-        reports: str = "Markdown HTML JSON",
+        reports: str = "Markdown | JSON",
         overall_status: str = "SUCCESS",
         total_duration: float = 0.0,
         width: int = DEFAULT_WIDTH,
