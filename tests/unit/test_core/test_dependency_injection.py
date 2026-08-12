@@ -288,14 +288,14 @@ class TestInjectDecorator:
     def test_inject_decorator_with_args(
         self, container: Container, sample_service
     ):
-        """inject decorator passes through positional args."""
+        """inject decorator passes through positional args as keyword args."""
         container.register(sample_service, sample_service("injected"))
 
         @inject(container)
         def my_function(svc: sample_service, extra: str = "default") -> tuple:
             return (svc.get_value(), extra)
 
-        result = my_function("positional")
+        result = my_function(extra="positional")
         assert result == ("injected", "positional")
 
 

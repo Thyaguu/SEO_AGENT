@@ -406,6 +406,7 @@ class ExecutionAgent:
                             modified_files = [str(target_file)]
 
                 # Normalize modified file paths relative to workspace path for consistent reporting
+                workspace = self._config.workspace_path or task.input_data.get("workspace_path")
                 if workspace and modified_files:
                     from pathlib import Path
                     norm_modified = []
@@ -439,6 +440,7 @@ class ExecutionAgent:
                     executed_at=datetime.utcnow(),
                 )
             else:
+                is_success = False
                 error = result.get_error_or_none() or "Unknown error"
                 summary.errors.append(f"Task {task.task_id}: {error}")
 
@@ -451,6 +453,7 @@ class ExecutionAgent:
                 )
 
         except Exception as e:
+            is_success = False
             error_msg = f"Task execution failed: {str(e)}"
             return TaskResult(
                 task_id=task.task_id,

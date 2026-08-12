@@ -113,7 +113,7 @@ def log_function_call(
         # Filter out potentially sensitive values
         safe_kwargs = {k: v for k, v in kwargs.items() if not _is_sensitive(k)}
         context["kwargs"] = safe_kwargs
-    logger.debug("function_called", **context)
+    logger.debug("function_called %s", context)
 
 
 def _is_sensitive(key: str) -> bool:

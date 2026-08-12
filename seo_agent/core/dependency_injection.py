@@ -62,7 +62,7 @@ class Container:
                 f"Interface {interface.__name__} is already registered"
             )
 
-        if callable(factory) and not isinstance(factory, type):
+        if callable(factory):
             self._factories[interface] = factory
         else:
             self._singletons[interface] = factory
@@ -202,8 +202,12 @@ def inject(container: Container) -> Callable[[F], F]:
             sig = inspect.signature(func)
             resolved_kwargs = dict(kwargs)
 
+            # Map positional args to parameter names so we don't inject over them
+            param_names = list(sig.parameters.keys())
+            positional_names = set(param_names[: len(args)])
+
             for param_name, param in sig.parameters.items():
-                if param_name in resolved_kwargs:
+                if param_name in resolved_kwargs or param_name in positional_names:
                     continue
                 if param.annotation != inspect.Parameter.empty:
                     try:

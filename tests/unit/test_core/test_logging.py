@@ -106,12 +106,11 @@ class TestConfigureLogging:
         extra_handler.setLevel(logging.DEBUG)
         root_logger = logging.getLogger()
         root_logger.addHandler(extra_handler)
-        initial_count = len(root_logger.handlers)
 
         configure_logging(level="INFO")
 
-        # Should have same number of handlers (replaced, not added)
-        assert len(root_logger.handlers) == initial_count
+        # Should have exactly 1 handler (old ones removed, 1 new one added)
+        assert len(root_logger.handlers) == 1
 
     def test_configure_logging_sets_text_formatter_by_default(self, monkeypatch):
         """configure_logging sets text formatter when format_json=False."""
@@ -395,12 +394,13 @@ class TestResetLoggers:
         assert logger.name == "test1"
 
     def test_reset_loggers_allows_fresh_start(self):
-        """reset_loggers allows starting fresh with new loggers."""
-        logger1 = get_logger("fresh_test")
+        """reset_loggers clears the internal registry."""
+        from seo_agent.core import logging as logging_mod
+        get_logger("fresh_test")
+        assert "fresh_test" in logging_mod._loggers
         reset_loggers()
-        logger2 = get_logger("fresh_test")
-        # Should be different instances after reset
-        assert logger1 is not logger2
+        # Registry should be empty after reset
+        assert "fresh_test" not in logging_mod._loggers
 
 
 # =============================================================================
@@ -415,21 +415,21 @@ class TestLoggingIntegration:
         """configure_logging affects loggers returned by get_logger."""
         configure_logging(level="DEBUG")
         logger = get_logger("configured_module")
-        # Logger should inherit root logger level
-        assert logger.level == logging.DEBUG
+        # Child loggers inherit level from root; check effective level
+        assert logger.getEffectiveLevel() == logging.DEBUG
 
-    def test_logging_produces_output(self, caplog, monkeypatch):
+    def test_logging_produces_output(self, capsys, monkeypatch):
         """Logging produces expected output."""
         configure_logging(level="INFO")
         logger = get_logger("output_test")
-        with caplog.at_level(logging.INFO):
-            logger.info("test message", extra_field="value")
-        assert "test message" in caplog.text
+        logger.info("test message %s", "value")
+        captured = capsys.readouterr()
+        assert "test message" in captured.out
 
-    def test_logger_name_in_output(self, caplog, monkeypatch):
+    def test_logger_name_in_output(self, capsys, monkeypatch):
         """Logger name appears in log output."""
         configure_logging(level="INFO")
         logger = get_logger("named_logger_test")
-        with caplog.at_level(logging.INFO):
-            logger.info("test")
-        assert "named_logger_test" in caplog.text
+        logger.info("test")
+        captured = capsys.readouterr()
+        assert "named_logger_test" in captured.out

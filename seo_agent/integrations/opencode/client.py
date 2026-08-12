@@ -347,6 +347,38 @@ class OpenCodeClient:
         except Exception:
             return False
 
+    def delete_session(self, session_id: str | None = None) -> bool:
+        """Delete an OpenCode session on the server to release resources.
+
+        Args:
+            session_id: Session ID to delete. If None, deletes cached session.
+
+        Returns:
+            True if deletion succeeded or session did not exist, False otherwise.
+        """
+        import urllib.request
+
+        target_id = session_id or self._session_id
+        if not target_id:
+            return True
+
+        logger.info(f"[OpenCode] Deleting session: {target_id}")
+        try:
+            url = f"{self._base_url}/session/{target_id}"
+            req = urllib.request.Request(url, method="DELETE")
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                success = resp.status in (200, 204)
+                if success and target_id == self._session_id:
+                    self._session_id = None
+                    self._session_workspace_path = None
+                return success
+        except Exception as e:
+            logger.warning(f"[OpenCode] Failed to delete session {target_id}: {e}")
+            if target_id == self._session_id:
+                self._session_id = None
+                self._session_workspace_path = None
+            return False
+
     def _create_session(self, workspace_path: str | None = None) -> str:
         """Create a new OpenCode session on the server."""
         import urllib.request
@@ -403,8 +435,88 @@ class OpenCodeClient:
         self._session_workspace_path = workspace_path
         return self._session_id
 
+    def _run_cli_command(
+        self,
+        cmd: list[str],
+        cwd: str | None,
+        timeout: float,
+    ) -> tuple[int, str, str]:
+        """Execute CLI subprocess with process group isolation and proper cleanup.
+
+        Args:
+            cmd: Command list to execute.
+            cwd: Working directory.
+            timeout: Command timeout in seconds.
+
+        Returns:
+            Tuple of (returncode, stdout, stderr).
+        """
+        import os
+        import sys
+
+        kwargs: dict[str, Any] = {
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+            "text": True,
+            "cwd": cwd,
+        }
+        if sys.platform != "win32":
+            kwargs["start_new_session"] = True
+
+        proc = subprocess.Popen(cmd, **kwargs)
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+            return proc.returncode, stdout or "", stderr or ""
+        except subprocess.TimeoutExpired as exc:
+            self._terminate_process(proc)
+            proc.communicate()
+            raise exc
+        except Exception as exc:
+            self._terminate_process(proc)
+            proc.communicate()
+            raise exc
+
+    @staticmethod
+    def _terminate_process(proc: subprocess.Popen[Any]) -> None:
+        """Terminate a subprocess and its process group safely."""
+        import os
+        import signal
+        import sys
+        import time
+
+        try:
+            if sys.platform != "win32":
+                try:
+                    pgid = os.getpgid(proc.pid)
+                    os.killpg(pgid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+            else:
+                proc.terminate()
+
+            t0 = time.time()
+            while time.time() - t0 < 0.5:
+                if proc.poll() is not None:
+                    return
+                time.sleep(0.05)
+
+            if sys.platform != "win32":
+                try:
+                    pgid = os.getpgid(proc.pid)
+                    os.killpg(pgid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            else:
+                proc.kill()
+            proc.wait(timeout=1.0)
+        except Exception as e:
+            logger.debug(f"Error terminating process {proc.pid}: {e}")
+
     def execute(self, request: OpenCodeRequest) -> Result[OpenCodeResponse, str]:
-        """Execute an OpenCode request via CLI subprocess.
+        """Execute an OpenCode request via CLI subprocess in an isolated session.
+
+        Each request uses a dedicated OpenCode session to prevent context bloat,
+        state pollution, and hangs. The session is cleaned up after execution.
 
         Args:
             request: The OpenCode request to execute.
@@ -414,85 +526,67 @@ class OpenCodeClient:
         """
         logger.info(f"Executing OpenCode request: {request.request_id}")
 
-        session_id = self.get_or_create_session(request.workspace_path)
-
-        cmd = [
-            self._opencode_bin,
-            "run",
-            "--attach", self._base_url,
-            "--session", session_id,
-            "--format", "json",
-            request.instructions,
-        ]
-
+        session_id = self._create_session(request.workspace_path)
         cwd = request.workspace_path or None
         started_at = datetime.utcnow()
 
-        logger.debug(f"OpenCode command: {' '.join(cmd)}")
-        if cwd:
-            logger.debug(f"OpenCode working directory: {cwd}")
-
-        logger.debug(
-            f"OpenCode Debug: request_id={request.request_id}, "
-            f"workspace_path={request.workspace_path}, cwd={cwd}, "
-            f"command={' '.join(cmd)}"
-        )
-
         try:
-            proc = subprocess.run(
-                cmd,
-                input="",
-                capture_output=True,
-                text=True,
-                timeout=self._timeout,
+            cmd = [
+                self._opencode_bin,
+                "run",
+                "--attach", self._base_url,
+                "--session", session_id,
+                "--format", "json",
+                request.instructions,
+            ]
+
+            logger.debug(f"OpenCode command: {' '.join(cmd)}")
+            if cwd:
+                logger.debug(f"OpenCode working directory: {cwd}")
+
+            returncode, stdout, stderr = self._run_cli_command(
+                cmd=cmd,
                 cwd=cwd,
+                timeout=self._timeout,
             )
 
-            # Detect session not found error and recover automatically
-            combined_output = f"{proc.stderr or ''}\n{proc.stdout or ''}"
-            if proc.returncode != 0 and "session not found" in combined_output.lower():
+            # Detect session not found error and recover automatically with fresh session
+            combined_output = f"{stderr}\n{stdout}"
+            if returncode != 0 and "session not found" in combined_output.lower():
                 logger.warning("[OpenCode]\nSession expired. Creating a new session...")
                 logger.info("[OpenCode]\nRetrying execution with fresh session...")
-                self._session_id = None
-                self._session_workspace_path = None
+                self.delete_session(session_id)
+                session_id = self._create_session(request.workspace_path)
 
-                fresh_session_id = self.get_or_create_session(request.workspace_path)
                 cmd = [
                     self._opencode_bin,
                     "run",
                     "--attach", self._base_url,
-                    "--session", fresh_session_id,
+                    "--session", session_id,
                     "--format", "json",
                     request.instructions,
                 ]
-                proc = subprocess.run(
-                    cmd,
-                    input="",
-                    capture_output=True,
-                    text=True,
-                    timeout=self._timeout,
+                returncode, stdout, stderr = self._run_cli_command(
+                    cmd=cmd,
                     cwd=cwd,
+                    timeout=self._timeout,
                 )
 
             logger.debug(
                 f"OpenCode Completed: request_id={request.request_id}, "
-                f"exit_code={proc.returncode}"
+                f"exit_code={returncode}"
             )
 
-            logger.debug(f"OpenCode exit code: {proc.returncode}")
-            if proc.stderr:
-                logger.debug(f"OpenCode stderr: {proc.stderr[:500]}")
-
-            if proc.returncode != 0 and not proc.stdout.strip():
+            if returncode != 0 and not stdout.strip():
                 error_msg = (
-                    f"OpenCode CLI exited with code {proc.returncode}: "
-                    f"{proc.stderr.strip() or 'no output'}"
+                    f"OpenCode CLI exited with code {returncode}: "
+                    f"{stderr.strip() or 'no output'}"
                 )
                 logger.error(error_msg)
                 return Failure(error_msg)
 
             result = self._parse_event_stream(
-                stdout=proc.stdout,
+                stdout=stdout,
                 request_id=request.request_id,
                 started_at=started_at,
             )
@@ -512,16 +606,12 @@ class OpenCodeClient:
             return Failure(error_msg)
 
         except subprocess.TimeoutExpired as exc:
-            # Decode stdout/stderr from the exception (may be bytes or str or None)
             def _decode(data):
                 if data is None:
                     return None
                 if isinstance(data, bytes):
                     return data.decode("utf-8", errors="replace")
                 return data
-
-            exc_stdout = _decode(exc.stdout)
-            exc_stderr = _decode(exc.stderr)
 
             logger.error(
                 f"OpenCode Timeout: request_id={request.request_id}, "
@@ -543,6 +633,9 @@ class OpenCodeClient:
             error_msg = f"Unexpected error: {e}"
             logger.exception(error_msg)
             return Failure(error_msg)
+
+        finally:
+            self.delete_session(session_id)
 
     def execute_simple(
         self,

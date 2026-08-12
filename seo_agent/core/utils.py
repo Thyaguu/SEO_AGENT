@@ -186,6 +186,6 @@ def remove_suffix(text: str, suffix: str) -> str:
     Returns:
         String without the suffix.
     """
-    if text.endswith(suffix):
+    if suffix and text.endswith(suffix):
         return text[: -len(suffix)]
     return text
