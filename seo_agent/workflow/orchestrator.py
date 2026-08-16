@@ -1233,6 +1233,7 @@ def _create_seo_update_handler(
                 sitemap_path = context.repository_path / "sitemap.xml"
                 sitemap_service.set_sitemap_path(sitemap_path)
 
+                from seo_agent.models.seo import Metadata
                 seo_pages: list[SEOPage] = []
                 for p_info in (context.page_info or []):
                     if p_info.metadata:
@@ -1242,11 +1243,12 @@ def _create_seo_update_handler(
                                 title=p_info.title or "",
                                 description=p_info.metadata.description or "",
                                 h1=p_info.title or "",
-                                metadata=p_info.metadata,
+                                metadata=Metadata.from_page_metadata(p_info.metadata),
                                 route_path=p_info.route,
                                 file_path=str(p_info.file_path),
                             )
                         )
+
 
                 sitemap_res = sitemap_service.update_sitemap(seo_pages, preserve_existing=True)
                 if not sitemap_res.is_success():

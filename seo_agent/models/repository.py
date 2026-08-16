@@ -9,12 +9,13 @@ designed for immutability where appropriate.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING
+from pydantic import ConfigDict, Field
 
 from seo_agent.core.types import StrDict
+from seo_agent.models.base import BasePydanticModel
 
 if TYPE_CHECKING:
     from seo_agent.models.seo import Metadata
@@ -77,8 +78,7 @@ class PageType(Enum):
     UNKNOWN = "unknown"
 
 
-@dataclass(frozen=True)
-class DiscoveredPage:
+class DiscoveredPage(BasePydanticModel):
     """A page discovered during repository scanning.
 
     This is a lightweight model used during the discovery phase before
@@ -92,6 +92,15 @@ class DiscoveredPage:
         has_dynamic_params: Whether the route contains dynamic parameters.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     url_path: str
     file_path: str
     page_type: PageType = PageType.UNKNOWN
@@ -99,8 +108,7 @@ class DiscoveredPage:
     has_dynamic_params: bool = False
 
 
-@dataclass(frozen=True)
-class FrameworkInfo:
+class FrameworkInfo(BasePydanticModel):
     """Information about the detected framework.
 
     Attributes:
@@ -114,18 +122,26 @@ class FrameworkInfo:
         version: Detected framework version if available.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     framework_type: FrameworkType
     routing_strategy: RoutingStrategy = RoutingStrategy.UNKNOWN
     package_manager: str | None = None
     build_command: str | None = None
     dev_command: str | None = None
     output_directory: str | None = None
-    config_files: tuple[str, ...] = field(default_factory=tuple)
+    config_files: tuple[str, ...] = ()
     version: str | None = None
 
 
-@dataclass(frozen=True)
-class FileInfo:
+class FileInfo(BasePydanticModel):
     """Information about a file in the repository.
 
     Attributes:
@@ -138,6 +154,15 @@ class FileInfo:
         encoding: Text encoding if applicable.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     path: str
     absolute_path: str
     size_bytes: int = 0
@@ -147,8 +172,7 @@ class FileInfo:
     encoding: str | None = None
 
 
-@dataclass(frozen=True)
-class Heading:
+class Heading(BasePydanticModel):
     """HTML heading information.
 
     Attributes:
@@ -157,13 +181,21 @@ class Heading:
         id: Optional element ID for anchor links.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     level: int
     text: str
     id: str | None = None
 
 
-@dataclass(frozen=True)
-class PageMetadata:
+class PageMetadata(BasePydanticModel):
     """Existing metadata found on a page.
 
     Attributes:
@@ -178,19 +210,71 @@ class PageMetadata:
         headings: All headings on the page.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     title: str | None = None
     description: str | None = None
-    keywords: tuple[str, ...] = field(default_factory=tuple)
+    keywords: tuple[str, ...] = ()
     canonical: str | None = None
-    og_tags: StrDict = field(default_factory=dict)
-    twitter_tags: StrDict = field(default_factory=dict)
-    structured_data: tuple[str, ...] = field(default_factory=tuple)
+    og_tags: StrDict = Field(default_factory=dict)
+    twitter_tags: StrDict = Field(default_factory=dict)
+    structured_data: tuple[str, ...] = ()
     h1: str | None = None
-    headings: tuple[Heading, ...] = field(default_factory=tuple)
+    headings: tuple[Heading, ...] = ()
+
+    def to_metadata(self) -> Any:
+        """Convert repository PageMetadata into SEO Metadata model."""
+        from seo_agent.models.seo import Metadata, OpenGraphData, TwitterCardData
+
+        og_title = self.og_tags.get("og:title") or self.og_tags.get("title")
+        og_desc = self.og_tags.get("og:description") or self.og_tags.get("description")
+        og_img = self.og_tags.get("og:image") or self.og_tags.get("image")
+        og_url = self.og_tags.get("og:url") or self.og_tags.get("url")
+        og_type = self.og_tags.get("og:type") or "website"
+        og_site = self.og_tags.get("og:site_name") or self.og_tags.get("site_name")
+
+        og_data = OpenGraphData(
+            title=og_title,
+            description=og_desc,
+            image=og_img,
+            url=og_url,
+            type=og_type,
+            site_name=og_site,
+        )
+
+        tw_card = self.twitter_tags.get("twitter:card") or self.twitter_tags.get("card") or "summary"
+        tw_title = self.twitter_tags.get("twitter:title") or self.twitter_tags.get("title")
+        tw_desc = self.twitter_tags.get("twitter:description") or self.twitter_tags.get("description")
+        tw_img = self.twitter_tags.get("twitter:image") or self.twitter_tags.get("image")
+        tw_site = self.twitter_tags.get("twitter:site") or self.twitter_tags.get("site")
+
+        twitter_data = TwitterCardData(
+            card=tw_card,
+            title=tw_title,
+            description=tw_desc,
+            image=tw_img,
+            site=tw_site,
+        )
+
+        return Metadata(
+            title=self.title or "",
+            description=self.description or "",
+            canonical_url=self.canonical or "",
+            keywords=self.keywords,
+            og=og_data,
+            twitter=twitter_data,
+        )
 
 
-@dataclass(frozen=True)
-class PageInfo:
+
+class PageInfo(BasePydanticModel):
     """Information about a discovered page in the repository.
 
     Attributes:
@@ -206,20 +290,28 @@ class PageInfo:
         is_seo_page: Whether this is a generated SEO landing page.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     route: str
     file_path: str
     page_type: PageType = PageType.UNKNOWN
     title: str | None = None
     metadata: PageMetadata | None = None
-    keywords: tuple[str, ...] = field(default_factory=tuple)
+    keywords: tuple[str, ...] = ()
     purpose: str | None = None
-    links: tuple[str, ...] = field(default_factory=tuple)
+    links: tuple[str, ...] = ()
     last_modified: datetime | None = None
     is_seo_page: bool = False
 
 
-@dataclass(frozen=True)
-class SitemapInfo:
+class SitemapInfo(BasePydanticModel):
     """Information about existing sitemap.xml.
 
     Attributes:
@@ -229,14 +321,22 @@ class SitemapInfo:
         format: Sitemap format (xml, json, etc.).
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     file_path: str
     exists: bool = False
-    entries: tuple[str, ...] = field(default_factory=tuple)
+    entries: tuple[str, ...] = ()
     format: str = "xml"
 
 
-@dataclass(frozen=True)
-class RobotsInfo:
+class RobotsInfo(BasePydanticModel):
     """Information about existing robots.txt.
 
     Attributes:
@@ -245,13 +345,21 @@ class RobotsInfo:
         rules: Parsed robots rules.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     file_path: str
     exists: bool = False
-    rules: tuple[str, ...] = field(default_factory=tuple)
+    rules: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True)
-class RepositoryInfo:
+class RepositoryInfo(BasePydanticModel):
     """Complete repository analysis results.
 
     This is the main output of the repository analysis phase and contains
@@ -269,19 +377,27 @@ class RepositoryInfo:
         analyzed_at: Timestamp of analysis.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     root_path: str
     framework: FrameworkInfo
-    pages: tuple[PageInfo, ...] = field(default_factory=tuple)
-    seo_pages: tuple[PageInfo, ...] = field(default_factory=tuple)
+    pages: tuple[PageInfo, ...] = ()
+    seo_pages: tuple[PageInfo, ...] = ()
     sitemap: SitemapInfo | None = None
     robots: RobotsInfo | None = None
-    public_assets: tuple[str, ...] = field(default_factory=tuple)
-    build_config: StrDict = field(default_factory=dict)
-    analyzed_at: datetime = field(default_factory=datetime.utcnow)
+    public_assets: tuple[str, ...] = ()
+    build_config: StrDict = Field(default_factory=dict)
+    analyzed_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-@dataclass(frozen=True)
-class RepositoryScanOptions:
+class RepositoryScanOptions(BasePydanticModel):
     """Options for repository scanning.
 
     Attributes:
@@ -292,15 +408,23 @@ class RepositoryScanOptions:
         follow_symlinks: Follow symbolic links.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     include_hidden: bool = False
     max_depth: int | None = None
-    extensions: tuple[str, ...] = field(default_factory=tuple)
-    exclude_patterns: tuple[str, ...] = field(default_factory=lambda: ("node_modules", ".git", "__pycache__", "reports"))
+    extensions: tuple[str, ...] = ()
+    exclude_patterns: tuple[str, ...] = ("node_modules", ".git", "__pycache__", "reports")
     follow_symlinks: bool = False
 
 
-@dataclass(frozen=True)
-class PageAnalysisResult:
+class PageAnalysisResult(BasePydanticModel):
     """Result of analyzing a single page.
 
     Attributes:
@@ -310,7 +434,16 @@ class PageAnalysisResult:
         extracted_keywords: Keywords extracted from page content.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     page: PageInfo
     success: bool = True
     error: str | None = None
-    extracted_keywords: tuple[str, ...] = field(default_factory=tuple)
+    extracted_keywords: tuple[str, ...] = ()

@@ -8,14 +8,15 @@ All models follow SOLID principles with single responsibility.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any
+from pydantic import ConfigDict, Field, PrivateAttr
 
-if TYPE_CHECKING:
-    from seo_agent.models.seo import SEOPage, Metadata
-    from seo_agent.models.repository import RepositoryInfo
+from seo_agent.models.base import BasePydanticModel
+
+from seo_agent.models.seo import SEOPage, Metadata
+from seo_agent.models.repository import RepositoryInfo
 
 
 class TaskStatus(Enum):
@@ -69,8 +70,7 @@ class TaskType(Enum):
     VALIDATION = "validation"
 
 
-@dataclass(frozen=True)
-class TaskDependency:
+class TaskDependency(BasePydanticModel):
     """Represents a dependency on another task.
 
     Attributes:
@@ -78,12 +78,20 @@ class TaskDependency:
         dependency_type: Type of dependency (must_complete, must_succeed).
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     task_id: str
     dependency_type: str = "must_complete"
 
 
-@dataclass(frozen=True)
-class Task:
+class Task(BasePydanticModel):
     """Represents a single executable task.
 
     Tasks are the atomic units of work in the SEO agent execution.
@@ -104,14 +112,23 @@ class Task:
         max_retries: Maximum retry attempts allowed.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     task_id: str
     task_type: TaskType
     description: str
     status: TaskStatus = TaskStatus.PENDING
     priority: TaskPriority = TaskPriority.NORMAL
-    dependencies: tuple[TaskDependency, ...] = field(default_factory=tuple)
-    input_data: dict[str, Any] = field(default_factory=dict)
-    output_data: dict[str, Any] = field(default_factory=dict)
+    dependencies: tuple[TaskDependency, ...] = ()
+    input_data: dict[str, Any] = Field(default_factory=dict)
+    output_data: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
@@ -144,8 +161,7 @@ class Task:
         return None
 
 
-@dataclass(frozen=True)
-class Phase:
+class Phase(BasePydanticModel):
     """A phase containing multiple tasks.
 
     Phases group related tasks and can have their own status.
@@ -160,10 +176,19 @@ class Phase:
         completed_at: When phase completed.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     phase_id: str
     name: str
     description: str
-    tasks: tuple[Task, ...] = field(default_factory=tuple)
+    tasks: tuple[Task, ...] = ()
     status: TaskStatus = TaskStatus.PENDING
     started_at: datetime | None = None
     completed_at: datetime | None = None
@@ -184,8 +209,7 @@ class Phase:
         return sum(1 for t in self.tasks if t.status == TaskStatus.FAILED)
 
 
-@dataclass(frozen=True)
-class ExecutionPlan:
+class ExecutionPlan(BasePydanticModel):
     """Complete execution plan for SEO agent.
 
     The execution plan organizes tasks into phases and defines
@@ -198,10 +222,19 @@ class ExecutionPlan:
         created_at: When plan was created.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     request_id: str
-    phases: tuple[Phase, ...] = field(default_factory=tuple)
+    phases: tuple[Phase, ...] = ()
     estimated_duration_seconds: float = 0.0
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
     @property
     def all_tasks(self) -> tuple[Task, ...]:
@@ -245,8 +278,7 @@ class ExecutionPlan:
         return None
 
 
-@dataclass(frozen=True)
-class TaskResult:
+class TaskResult(BasePydanticModel):
     """Result of executing a single task.
 
     Attributes:
@@ -258,16 +290,24 @@ class TaskResult:
         executed_at: When task was executed.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     task_id: str
     success: bool
-    output: dict[str, Any] = field(default_factory=dict)
+    output: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None
     duration_seconds: float = 0.0
-    executed_at: datetime = field(default_factory=datetime.utcnow)
+    executed_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-@dataclass(frozen=True)
-class PhaseResult:
+class PhaseResult(BasePydanticModel):
     """Result of executing a phase.
 
     Attributes:
@@ -278,15 +318,23 @@ class PhaseResult:
         executed_at: When phase was executed.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     phase_id: str
     success: bool
-    task_results: tuple[TaskResult, ...] = field(default_factory=tuple)
+    task_results: tuple[TaskResult, ...] = ()
     duration_seconds: float = 0.0
-    executed_at: datetime = field(default_factory=datetime.utcnow)
+    executed_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-@dataclass(frozen=True)
-class ExecutionResult:
+class ExecutionResult(BasePydanticModel):
     """Complete result of executing the SEO agent.
 
     Attributes:
@@ -304,18 +352,27 @@ class ExecutionResult:
         errors: List of errors encountered.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     request_id: str
     success: bool
-    plan: ExecutionPlan
-    phase_results: tuple[PhaseResult, ...] = field(default_factory=tuple)
+    plan: ExecutionPlan | None = None
+    phase_results: tuple[PhaseResult, ...] = ()
     repository_info: RepositoryInfo | None = None
-    seo_pages_created: tuple[SEOPage, ...] = field(default_factory=tuple)
-    seo_pages_removed: tuple[str, ...] = field(default_factory=tuple)
-    metadata_updates: tuple[Metadata, ...] = field(default_factory=tuple)
+    seo_pages_created: tuple[SEOPage, ...] = ()
+    seo_pages_removed: tuple[str, ...] = ()
+    metadata_updates: tuple[Metadata, ...] = ()
     total_duration_seconds: float = 0.0
-    started_at: datetime = field(default_factory=datetime.utcnow)
+    started_at: datetime = Field(default_factory=datetime.utcnow)
     completed_at: datetime | None = None
-    errors: tuple[str, ...] = field(default_factory=tuple)
+    errors: tuple[str, ...] = ()
 
     @property
     def pages_created_count(self) -> int:
@@ -376,8 +433,7 @@ class ExecutionResult:
         return self.total_duration_seconds
 
 
-@dataclass(frozen=True)
-class ExecutionContext:
+class ExecutionContext(BasePydanticModel):
     """Context passed to task executors.
 
     This object is passed to all task executors and provides
@@ -393,17 +449,25 @@ class ExecutionContext:
         skip_pipeline: Whether to skip CI/CD pipeline.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     request_id: str
     repository_path: str
     repository_info: RepositoryInfo | None = None
-    seo_payload: dict[str, Any] = field(default_factory=dict)
+    seo_payload: dict[str, Any] = Field(default_factory=dict)
     execution_result: ExecutionResult | None = None
     skip_git: bool = False
     skip_pipeline: bool = False
 
 
-@dataclass(frozen=True)
-class TaskBuilder:
+class TaskBuilder(BasePydanticModel):
     """Builder for creating tasks with fluent interface.
 
     This class provides a convenient way to construct Task objects
@@ -415,66 +479,78 @@ class TaskBuilder:
         description: Task description.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     task_id: str
     task_type: TaskType
     description: str
-
-    _priority: TaskPriority = field(default=TaskPriority.NORMAL, repr=False)
-    _dependencies: list[TaskDependency] = field(default_factory=list, repr=False)
-    _input_data: dict[str, Any] = field(default_factory=dict, repr=False)
-    _max_retries: int = 3
+    _priority: TaskPriority = PrivateAttr(default=TaskPriority.NORMAL)
+    _dependencies: list[TaskDependency] = PrivateAttr(default_factory=list)
+    _input_data: dict[str, Any] = PrivateAttr(default_factory=dict)
+    _max_retries: int = PrivateAttr(default=3)
 
     def with_priority(self, priority: TaskPriority) -> TaskBuilder:
         """Set task priority."""
-        return TaskBuilder(
+        tb = TaskBuilder(
             task_id=self.task_id,
             task_type=self.task_type,
             description=self.description,
-            _priority=priority,
-            _dependencies=self._dependencies,
-            _input_data=self._input_data,
-            _max_retries=self._max_retries,
         )
+        tb._priority = priority
+        tb._dependencies = list(self._dependencies)
+        tb._input_data = dict(self._input_data)
+        tb._max_retries = self._max_retries
+        return tb
 
     def with_dependency(self, task_id: str) -> TaskBuilder:
         """Add a task dependency."""
         new_deps = list(self._dependencies)
         new_deps.append(TaskDependency(task_id=task_id))
-        return TaskBuilder(
+        tb = TaskBuilder(
             task_id=self.task_id,
             task_type=self.task_type,
             description=self.description,
-            _priority=self._priority,
-            _dependencies=new_deps,
-            _input_data=self._input_data,
-            _max_retries=self._max_retries,
         )
+        tb._priority = self._priority
+        tb._dependencies = new_deps
+        tb._input_data = dict(self._input_data)
+        tb._max_retries = self._max_retries
+        return tb
 
     def with_input(self, **kwargs: Any) -> TaskBuilder:
         """Add input data."""
         new_input = dict(self._input_data)
         new_input.update(kwargs)
-        return TaskBuilder(
+        tb = TaskBuilder(
             task_id=self.task_id,
             task_type=self.task_type,
             description=self.description,
-            _priority=self._priority,
-            _dependencies=self._dependencies,
-            _input_data=new_input,
-            _max_retries=self._max_retries,
         )
+        tb._priority = self._priority
+        tb._dependencies = list(self._dependencies)
+        tb._input_data = new_input
+        tb._max_retries = self._max_retries
+        return tb
 
     def with_max_retries(self, max_retries: int) -> TaskBuilder:
         """Set maximum retry attempts."""
-        return TaskBuilder(
+        tb = TaskBuilder(
             task_id=self.task_id,
             task_type=self.task_type,
             description=self.description,
-            _priority=self._priority,
-            _dependencies=self._dependencies,
-            _input_data=self._input_data,
-            _max_retries=max_retries,
         )
+        tb._priority = self._priority
+        tb._dependencies = list(self._dependencies)
+        tb._input_data = dict(self._input_data)
+        tb._max_retries = max_retries
+        return tb
 
     def build(self) -> Task:
         """Build the Task object."""

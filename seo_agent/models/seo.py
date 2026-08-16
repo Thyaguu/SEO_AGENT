@@ -9,12 +9,13 @@ designed for immutability where appropriate.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
-from typing import Annotated, Literal
+from typing import Annotated, Any
+from pydantic import ConfigDict, Field, field_validator
 
+from enum import Enum
 from seo_agent.core.types import StrDict
+from seo_agent.models.base import BasePydanticModel
 
 
 class KeywordType(Enum):
@@ -36,8 +37,8 @@ class ChangeFrequency(Enum):
     NEVER = "never"
 
 
-@dataclass(frozen=True)
-class Keyword:
+
+class Keyword(BasePydanticModel):
     """Represents an SEO keyword with associated metadata.
 
     Attributes:
@@ -49,6 +50,15 @@ class Keyword:
         reason: Optional reasoning for keyword selection.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     term: str
     keyword_type: KeywordType
     search_volume: int | None = None
@@ -57,8 +67,7 @@ class Keyword:
     reason: str | None = None
 
 
-@dataclass(frozen=True)
-class OpenGraphData:
+class OpenGraphData(BasePydanticModel):
     """Open Graph meta tag data for social sharing.
 
     Attributes:
@@ -69,6 +78,15 @@ class OpenGraphData:
         type: Content type (website, article, etc.).
         site_name: Name of the website.
     """
+
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
 
     title: str | None = None
     description: str | None = None
@@ -81,8 +99,7 @@ class OpenGraphData:
     audio: str | None = None
 
 
-@dataclass(frozen=True)
-class TwitterCardData:
+class TwitterCardData(BasePydanticModel):
     """Twitter Card meta tag data.
 
     Attributes:
@@ -93,6 +110,15 @@ class TwitterCardData:
         site: Twitter handle of content creator.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     card: str = "summary"
     title: str | None = None
     description: str | None = None
@@ -100,8 +126,7 @@ class TwitterCardData:
     site: str | None = None
 
 
-@dataclass(frozen=True)
-class StructuredData:
+class StructuredData(BasePydanticModel):
     """Schema.org structured data for rich search results.
 
     Attributes:
@@ -110,13 +135,21 @@ class StructuredData:
         raw_json: Optional raw JSON-LD string if pre-formatted.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     schema_type: str
-    properties: StrDict = field(default_factory=dict)
+    properties: StrDict = Field(default_factory=dict)
     raw_json: str | None = None
 
 
-@dataclass(frozen=True)
-class JsonLdData:
+class JsonLdData(BasePydanticModel):
     """JSON-LD structured data extracted from HTML.
 
     Attributes:
@@ -125,13 +158,21 @@ class JsonLdData:
         data: The full JSON-LD data dictionary.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     context: str
     type: str | None = None
-    data: StrDict = field(default_factory=dict)
+    data: StrDict = Field(default_factory=dict)
 
 
-@dataclass(frozen=True)
-class Metadata:
+class Metadata(BasePydanticModel):
     """Complete SEO metadata for a page.
 
     This model contains all SEO-related meta tags and structured data
@@ -140,9 +181,9 @@ class Metadata:
     Attributes:
         title: HTML title tag (max 60 characters recommended).
         description: Meta description (max 160 characters recommended).
-        keywords: List of meta keywords (optional, rarely used).
         canonical_url: Canonical URL to prevent duplicate content issues.
         robots: Robots meta directive (e.g., "index, follow").
+        keywords: List of meta keywords (optional, rarely used).
         primary_keyword: The main target keyword for the page.
         secondary_keywords: Additional target keywords.
         og: Open Graph social sharing data.
@@ -151,21 +192,55 @@ class Metadata:
         language: HTML language code (e.g., "en", "en-US").
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     title: str
     description: str
     canonical_url: str
     robots: str = "index, follow"
-    keywords: tuple[str, ...] = field(default_factory=tuple)
+    keywords: tuple[str, ...] = ()
     primary_keyword: Keyword | None = None
-    secondary_keywords: tuple[Keyword, ...] = field(default_factory=tuple)
-    og: OpenGraphData = field(default_factory=OpenGraphData)
-    twitter: TwitterCardData = field(default_factory=TwitterCardData)
-    structured_data: tuple[StructuredData, ...] = field(default_factory=tuple)
+    secondary_keywords: tuple[Keyword, ...] = ()
+    og: OpenGraphData = Field(default_factory=OpenGraphData)
+    twitter: TwitterCardData = Field(default_factory=TwitterCardData)
+    structured_data: tuple[StructuredData, ...] = ()
     language: str = "en"
 
+    @field_validator("og", mode="before")
+    @classmethod
+    def _validate_og(cls, v: Any) -> Any:
+        if v is None:
+            return OpenGraphData()
+        return v
 
-@dataclass(frozen=True)
-class SEOPage:
+    @field_validator("twitter", mode="before")
+    @classmethod
+    def _validate_twitter(cls, v: Any) -> Any:
+        if v is None:
+            return TwitterCardData()
+        return v
+
+    @classmethod
+    def from_page_metadata(cls, page_meta: Any) -> Metadata:
+        """Create a Metadata instance from a PageMetadata instance or dict."""
+        if hasattr(page_meta, "to_metadata"):
+            return page_meta.to_metadata()
+        if isinstance(page_meta, cls):
+            return page_meta
+        if isinstance(page_meta, dict):
+            return cls(**page_meta)
+        raise TypeError(f"Cannot convert {type(page_meta)} to Metadata")
+
+
+
+class SEOPage(BasePydanticModel):
     """Represents a generated SEO landing page.
 
     SEO landing pages are generated under the /seo directory based on
@@ -185,6 +260,15 @@ class SEOPage:
         modified_at: Timestamp when page was last modified.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     slug: str
     title: str
     description: str
@@ -192,14 +276,13 @@ class SEOPage:
     metadata: Metadata
     route_path: str
     file_path: str
-    content_sections: tuple[str, ...] = field(default_factory=tuple)
-    keywords: tuple[Keyword, ...] = field(default_factory=tuple)
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    modified_at: datetime = field(default_factory=datetime.utcnow)
+    content_sections: tuple[str, ...] = ()
+    keywords: tuple[Keyword, ...] = ()
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    modified_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-@dataclass(frozen=True)
-class SitemapEntry:
+class SitemapEntry(BasePydanticModel):
     """Entry in sitemap.xml.
 
     Attributes:
@@ -209,14 +292,22 @@ class SitemapEntry:
         priority: Relative priority of this URL (0.0-1.0).
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     url: str
     last_modified: datetime | None = None
     change_frequency: ChangeFrequency = ChangeFrequency.WEEKLY
     priority: float = 0.5
 
 
-@dataclass(frozen=True)
-class RobotsRule:
+class RobotsRule(BasePydanticModel):
     """Rule in robots.txt file.
 
     Attributes:
@@ -226,14 +317,22 @@ class RobotsRule:
         crawl_delay: Optional delay between requests in seconds.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     user_agent: str
-    allow: tuple[str, ...] = field(default_factory=tuple)
-    disallow: tuple[str, ...] = field(default_factory=tuple)
+    allow: tuple[str, ...] = ()
+    disallow: tuple[str, ...] = ()
     crawl_delay: float | None = None
 
 
-@dataclass(frozen=True)
-class RobotsConfig:
+class RobotsConfig(BasePydanticModel):
     """Complete robots.txt configuration.
 
     Attributes:
@@ -241,12 +340,20 @@ class RobotsConfig:
         sitemap_urls: List of sitemap URLs referenced in the file.
     """
 
-    rules: tuple[RobotsRule, ...] = field(default_factory=tuple)
-    sitemap_urls: tuple[str, ...] = field(default_factory=tuple)
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
+    rules: tuple[RobotsRule, ...] = ()
+    sitemap_urls: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True)
-class CompetitorInfo:
+class CompetitorInfo(BasePydanticModel):
     """Information about a competitor for comparison sections.
 
     Attributes:
@@ -255,13 +362,21 @@ class CompetitorInfo:
         comparison_notes: Notes for comparison section.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     name: str
-    strengths: tuple[str, ...] = field(default_factory=tuple)
+    strengths: tuple[str, ...] = ()
     comparison_notes: str | None = None
 
 
-@dataclass(frozen=True)
-class FAQItem:
+class FAQItem(BasePydanticModel):
     """FAQ item for structured data and page content.
 
     Attributes:
@@ -269,12 +384,20 @@ class FAQItem:
         answer: The FAQ answer.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     question: str
     answer: str
 
 
-@dataclass(frozen=True)
-class InternalLink:
+class InternalLink(BasePydanticModel):
     """Internal link for cross-referencing SEO pages.
 
     Attributes:
@@ -283,13 +406,21 @@ class InternalLink:
         context: Optional surrounding context.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     target_url: str
     anchor_text: str
     context: str | None = None
 
 
-@dataclass(frozen=True)
-class ContentRecommendation:
+class ContentRecommendation(BasePydanticModel):
     """Content optimization recommendation.
 
     Attributes:
@@ -297,6 +428,15 @@ class ContentRecommendation:
         description: Detailed recommendation.
         priority: Priority level (1-5, 1 being highest).
     """
+
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
 
     recommendation_type: str
     description: str

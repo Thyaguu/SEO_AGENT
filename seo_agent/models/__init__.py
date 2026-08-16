@@ -18,6 +18,7 @@ Example:
     >>> task = Task(task_id="t1", task_type=TaskType.PAGE_ANALYSIS, ...)
 """
 
+from seo_agent.models.base import BasePydanticModel
 from seo_agent.models.seo import (
     ChangeFrequency,
     CompetitorInfo,
@@ -116,6 +117,7 @@ from seo_agent.models.workflow import (
 )
 
 __all__ = [
+    "BasePydanticModel",
     # SEO models
     "ChangeFrequency",
     "CompetitorInfo",

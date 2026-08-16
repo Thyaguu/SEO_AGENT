@@ -8,10 +8,12 @@ All models follow SOLID principles with single responsibility.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING
+from pydantic import ConfigDict, Field
+
+from seo_agent.models.base import BasePydanticModel
 
 if TYPE_CHECKING:
     from seo_agent.models.seo import SEOPage, Metadata
@@ -46,8 +48,7 @@ class ValidationCategory(Enum):
     STRUCTURE = "structure"
 
 
-@dataclass(frozen=True)
-class ValidationIssue:
+class ValidationIssue(BasePydanticModel):
     """A single validation issue found during review.
 
     Attributes:
@@ -59,6 +60,15 @@ class ValidationIssue:
         rule_id: Identifier of the rule that was violated.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     category: ValidationCategory
     severity: ValidationSeverity
     message: str
@@ -67,8 +77,7 @@ class ValidationIssue:
     rule_id: str | None = None
 
 
-@dataclass(frozen=True)
-class ValidationResult:
+class ValidationResult(BasePydanticModel):
     """Result of validating a single item.
 
     Attributes:
@@ -79,11 +88,20 @@ class ValidationResult:
         validated_at: When validation was performed.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     item_id: str
     item_type: str
     passed: bool = True
-    issues: tuple[ValidationIssue, ...] = field(default_factory=tuple)
-    validated_at: datetime = field(default_factory=datetime.utcnow)
+    issues: tuple[ValidationIssue, ...] = ()
+    validated_at: datetime = Field(default_factory=datetime.utcnow)
 
     @property
     def critical_issues(self) -> tuple[ValidationIssue, ...]:
@@ -104,8 +122,7 @@ class ValidationResult:
         return sum(1 for i in self.issues if i.severity == ValidationSeverity.WARNING)
 
 
-@dataclass(frozen=True)
-class SEOQualityCheck:
+class SEOQualityCheck(BasePydanticModel):
     """SEO quality check result.
 
     Attributes:
@@ -115,14 +132,22 @@ class SEOQualityCheck:
         details: Additional details about the check.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     check_name: str
     passed: bool
-    score: int = field(default=100)
+    score: int = 100
     details: str | None = None
 
 
-@dataclass(frozen=True)
-class ContentQualityCheck:
+class ContentQualityCheck(BasePydanticModel):
     """Content quality check result.
 
     Attributes:
@@ -134,16 +159,24 @@ class ContentQualityCheck:
         details: Additional details about the check.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     check_name: str
     passed: bool
-    score: int = field(default=100)
+    score: int = 100
     word_count: int = 0
     reading_time_minutes: float = 0.0
     details: str | None = None
 
 
-@dataclass(frozen=True)
-class ReviewFeedback:
+class ReviewFeedback(BasePydanticModel):
     """Feedback for a rejected review.
 
     Attributes:
@@ -156,17 +189,25 @@ class ReviewFeedback:
         reviewer_notes: Additional notes from reviewer.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     decision: ReviewDecision
     summary: str
-    issues: tuple[ValidationIssue, ...] = field(default_factory=tuple)
-    seo_checks: tuple[SEOQualityCheck, ...] = field(default_factory=tuple)
-    content_checks: tuple[ContentQualityCheck, ...] = field(default_factory=tuple)
-    recommendations: tuple[str, ...] = field(default_factory=tuple)
+    issues: tuple[ValidationIssue, ...] = ()
+    seo_checks: tuple[SEOQualityCheck, ...] = ()
+    content_checks: tuple[ContentQualityCheck, ...] = ()
+    recommendations: tuple[str, ...] = ()
     reviewer_notes: str | None = None
 
 
-@dataclass(frozen=True)
-class ReviewResult:
+class ReviewResult(BasePydanticModel):
     """Complete result of a review phase.
 
     Attributes:
@@ -182,21 +223,35 @@ class ReviewResult:
         reviewed_by: Who/what performed the review.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     request_id: str
     attempt_number: int
     decision: ReviewDecision
     feedback: ReviewFeedback | None = None
-    validation_results: tuple[ValidationResult, ...] = field(default_factory=tuple)
+    validation_results: tuple[ValidationResult, ...] = ()
     overall_score: int = 100
     seo_score: int = 100
     content_score: int = 100
-    reviewed_at: datetime = field(default_factory=datetime.utcnow)
+    reviewed_at: datetime = Field(default_factory=datetime.utcnow)
     reviewed_by: str = "automated"
 
     @property
     def is_approved(self) -> bool:
         """Check if review was approved."""
         return self.decision == ReviewDecision.APPROVED
+
+    @property
+    def is_valid(self) -> bool:
+        """Check if review was valid/approved."""
+        return self.is_approved
 
     @property
     def total_issues(self) -> int:
@@ -209,8 +264,7 @@ class ReviewResult:
         return sum(len(v.critical_issues) for v in self.validation_results)
 
 
-@dataclass(frozen=True)
-class ReviewSummary:
+class ReviewSummary(BasePydanticModel):
     """Summary of all review attempts.
 
     Attributes:
@@ -222,6 +276,15 @@ class ReviewSummary:
         improvement_trend: Whether scores improved over attempts.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     total_attempts: int
     approved_attempts: int
     rejected_attempts: int
@@ -230,8 +293,7 @@ class ReviewSummary:
     improvement_trend: bool = True
 
 
-@dataclass(frozen=True)
-class ReviewCriteria:
+class ReviewCriteria(BasePydanticModel):
     """Criteria for automated review.
 
     Attributes:
@@ -244,6 +306,15 @@ class ReviewCriteria:
         require_og_tags: Whether Open Graph tags are required.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     min_seo_score: int = 70
     min_content_score: int = 70
     max_critical_issues: int = 0
@@ -253,8 +324,7 @@ class ReviewCriteria:
     require_og_tags: bool = True
 
 
-@dataclass(frozen=True)
-class PageReviewContext:
+class PageReviewContext(BasePydanticModel):
     """Context for reviewing a specific page.
 
     Attributes:
@@ -265,8 +335,17 @@ class PageReviewContext:
         competitors: Competitor information for comparison.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     page: PageInfo | None = None
     seo_page: SEOPage | None = None
     metadata: Metadata | None = None
-    keywords: tuple[str, ...] = field(default_factory=tuple)
-    competitors: tuple[str, ...] = field(default_factory=tuple)
+    keywords: tuple[str, ...] = ()
+    competitors: tuple[str, ...] = ()

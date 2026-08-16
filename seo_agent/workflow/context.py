@@ -10,10 +10,13 @@ until completion or failure.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
+from pydantic import ConfigDict, Field
+
+from seo_agent.models.base import BasePydanticModel
 
 from seo_agent.models.repository import (
     DiscoveredPage,
@@ -22,16 +25,14 @@ from seo_agent.models.repository import (
     RepositoryInfo,
 )
 from seo_agent.models.review import ReviewResult
+from seo_agent.review.validator import ValidationResult
 from seo_agent.models.seo_input import NormalizedSEOEntry, SEOInputCollection
 from seo_agent.models.task import ExecutionPlan, ExecutionResult
+from seo_agent.models.workflow import WorkflowCheckpoint
 from seo_agent.workflow.stages import StageTransition, WorkflowStage
 
-if TYPE_CHECKING:
-    from seo_agent.models.workflow import WorkflowCheckpoint
 
-
-@dataclass
-class WorkflowContext:
+class WorkflowContext(BasePydanticModel):
     """Workflow execution context.
 
     This class holds all state shared between workflow stages. It is created
@@ -63,39 +64,47 @@ class WorkflowContext:
         metadata: Arbitrary metadata for extensibility.
     """
 
+    model_config = ConfigDict(
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     repository_path: Path
     stage: WorkflowStage = WorkflowStage.INITIALIZED
-    stage_started_at: datetime = field(default_factory=datetime.utcnow)
+    stage_started_at: datetime = Field(default_factory=datetime.utcnow)
 
     # Stage transition history
-    transitions: list[StageTransition] = field(default_factory=list)
+    transitions: list[StageTransition] = Field(default_factory=list)
 
     # Repository data
     repository_info: RepositoryInfo | None = None
     framework_info: FrameworkInfo | None = None
-    pages: list[DiscoveredPage] = field(default_factory=list)
-    page_info: list[PageInfo] = field(default_factory=list)
+    pages: list[DiscoveredPage] = Field(default_factory=list)
+    page_info: list[PageInfo] = Field(default_factory=list)
 
     # Execution data
     execution_plan: ExecutionPlan | None = None
     execution_result: ExecutionResult | None = None
-    review_result: ReviewResult | None = None
+    review_result: ValidationResult | ReviewResult | None = None
 
     # Keywords for SEO
-    keywords: list[str] = field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list)
 
     # External SEO Input Data (CSV / JSON)
     seo_input: SEOInputCollection | None = None
 
     # Checkpointing
-    checkpoints: list[WorkflowCheckpoint] = field(default_factory=list)
+    checkpoints: list[WorkflowCheckpoint] = Field(default_factory=list)
 
     # Errors
-    errors: list[str] = field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
 
     # Configuration and metadata
-    config: dict[str, Any] = field(default_factory=dict)
-    metadata: dict[str, Any] = field(default_factory=dict)
+    config: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     def get_seo_entry_for_page(self, route_or_path: str) -> NormalizedSEOEntry | None:
         """Find a matching normalized SEO entry for a given route or file path.
@@ -110,8 +119,8 @@ class WorkflowContext:
 
         for entry in self.seo_input.records:
             candidates = [
-                entry.page_path,
-                entry.url,
+                getattr(entry, "page_path", None),
+                getattr(entry, "url", None),
             ]
             for cand in candidates:
                 if not cand:
@@ -244,7 +253,7 @@ class WorkflowContext:
             return "SUCCESS"
         return "IN PROGRESS"
 
-    def add_review_result(self, result: ReviewResult) -> None:
+    def add_review_result(self, result: ValidationResult | ReviewResult) -> None:
         """Add/set review result."""
         self.review_result = result
 
@@ -302,7 +311,7 @@ class WorkflowContext:
         """
         self.execution_result = result
 
-    def set_review_result(self, result: ReviewResult) -> None:
+    def set_review_result(self, result: ValidationResult | ReviewResult) -> None:
         """Set review result.
 
         Args:
@@ -441,3 +450,6 @@ class WorkflowContext:
             f"errors={len(self.errors)}, "
             f"transitions={len(self.transitions)})"
         )
+
+
+WorkflowContext.model_rebuild(_types_namespace={"datetime": datetime})

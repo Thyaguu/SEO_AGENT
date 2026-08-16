@@ -8,13 +8,13 @@ All models follow SOLID principles with single responsibility.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
+from pydantic import ConfigDict, Field
 
-if TYPE_CHECKING:
-    from pathlib import Path
+from seo_agent.models.base import BasePydanticModel
 
 
 class OpenCodeModel(str, Enum):
@@ -48,8 +48,7 @@ class OpenCodeStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
-@dataclass(frozen=True)
-class OpenCodeFileEdit:
+class OpenCodeFileEdit(BasePydanticModel):
     """Represents a file edit operation.
 
     Attributes:
@@ -59,14 +58,22 @@ class OpenCodeFileEdit:
         is_new: Whether this is a new file.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     file_path: str
     content: str
     old_content: str | None = None
     is_new: bool = False
 
 
-@dataclass(frozen=True)
-class OpenCodeFileRead:
+class OpenCodeFileRead(BasePydanticModel):
     """Represents a file read operation.
 
     Attributes:
@@ -75,13 +82,21 @@ class OpenCodeFileRead:
         line_end: Ending line number (1-indexed).
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     file_path: str
     line_start: int | None = None
     line_end: int | None = None
 
 
-@dataclass(frozen=True)
-class OpenCodeSearchQuery:
+class OpenCodeSearchQuery(BasePydanticModel):
     """Represents a file search query.
 
     Attributes:
@@ -90,13 +105,21 @@ class OpenCodeSearchQuery:
         case_sensitive: Whether search is case-sensitive.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     pattern: str
     file_pattern: str | None = None
     case_sensitive: bool = False
 
 
-@dataclass(frozen=True)
-class OpenCodeActionRequest:
+class OpenCodeActionRequest(BasePydanticModel):
     """Single action request for OpenCode.
 
     Attributes:
@@ -108,6 +131,15 @@ class OpenCodeActionRequest:
         max_results: Maximum results for search operations.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     action: OpenCodeAction
     file_path: str | None = None
     content: str | None = None
@@ -116,8 +148,7 @@ class OpenCodeActionRequest:
     max_results: int = 100
 
 
-@dataclass(frozen=True)
-class OpenCodeRequest:
+class OpenCodeRequest(BasePydanticModel):
     """Complete request for OpenCode execution.
 
     Attributes:
@@ -128,20 +159,29 @@ class OpenCodeRequest:
         max_iterations: Maximum number of iterations.
         workspace_path: Path to the workspace.
         temperature: Temperature for generation.
+        created_at: Creation timestamp.
     """
+
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
 
     request_id: str
     instructions: str
-    actions: tuple[OpenCodeActionRequest, ...] = field(default_factory=tuple)
+    actions: tuple[OpenCodeActionRequest, ...] = ()
     model: OpenCodeModel = OpenCodeModel.CLAUDE_3_5_SONNET
     max_iterations: int = 10
     workspace_path: str | None = None
     temperature: float = 0.7
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-@dataclass(frozen=True)
-class OpenCodeFileChange:
+class OpenCodeFileChange(BasePydanticModel):
     """Represents a file change result.
 
     Attributes:
@@ -151,14 +191,22 @@ class OpenCodeFileChange:
         content: New content after change.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     file_path: str
     change_type: str
     diff: str | None = None
     content: str | None = None
 
 
-@dataclass(frozen=True)
-class OpenCodeActionResult:
+class OpenCodeActionResult(BasePydanticModel):
     """Result of a single action.
 
     Attributes:
@@ -169,15 +217,23 @@ class OpenCodeActionResult:
         file_changes: Files changed by this action.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     action: OpenCodeAction
     success: bool
     output: dict[str, Any] | None = None
     error: str | None = None
-    file_changes: tuple[OpenCodeFileChange, ...] = field(default_factory=tuple)
+    file_changes: tuple[OpenCodeFileChange, ...] = ()
 
 
-@dataclass(frozen=True)
-class OpenCodeResponse:
+class OpenCodeResponse(BasePydanticModel):
     """Complete response from OpenCode execution.
 
     Attributes:
@@ -185,19 +241,28 @@ class OpenCodeResponse:
         status: Execution status.
         results: Results of all actions.
         total_iterations: Number of iterations used.
-        model: Model used for execution.
+        model: OpenCodeModel | None = None.
         error: Error message if overall execution failed.
         started_at: When execution started.
         completed_at: When execution completed.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     request_id: str
     status: OpenCodeStatus
-    results: tuple[OpenCodeActionResult, ...] = field(default_factory=tuple)
+    results: tuple[OpenCodeActionResult, ...] = ()
     total_iterations: int = 0
     model: OpenCodeModel | None = None
     error: str | None = None
-    started_at: datetime = field(default_factory=datetime.utcnow)
+    started_at: datetime = Field(default_factory=datetime.utcnow)
     completed_at: datetime | None = None
 
     @property
@@ -221,8 +286,7 @@ class OpenCodeResponse:
         return tuple(changes)
 
 
-@dataclass(frozen=True)
-class OpenCodeExecutionContext:
+class OpenCodeExecutionContext(BasePydanticModel):
     """Context for OpenCode execution.
 
     Attributes:
@@ -233,8 +297,17 @@ class OpenCodeExecutionContext:
         environment: Environment variables.
     """
 
+    model_config = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        use_enum_values=False,
+        extra="ignore",
+    )
+
     workspace_path: Path
     repository_url: str | None = None
     branch: str | None = None
     commit_sha: str | None = None
-    environment: dict[str, str] = field(default_factory=dict)
+    environment: dict[str, str] = Field(default_factory=dict)

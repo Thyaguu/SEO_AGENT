@@ -6,12 +6,12 @@ H2 outlines, LSI keywords, and proposed metadata).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Any
+from pydantic import Field
+from seo_agent.models.base import BasePydanticModel
 
 
-@dataclass
-class NormalizedSEOEntry:
+class NormalizedSEOEntry(BasePydanticModel):
     """Normalized keyword intelligence record.
 
     Attributes:
@@ -41,10 +41,10 @@ class NormalizedSEOEntry:
     ranking_feasibility: float = 0.0
     meta_title: str | None = None
     meta_description: str | None = None
-    h2_outlines: list[str] = field(default_factory=list)
-    lsi_keywords: list[str] = field(default_factory=list)
+    h2_outlines: list[str] = Field(default_factory=list)
+    lsi_keywords: list[str] = Field(default_factory=list)
     page_path: str | None = None
-    raw_data: dict[str, Any] = field(default_factory=dict)
+    raw_data: dict[str, Any] = Field(default_factory=dict)
 
     # Legacy compatibility fields
     @property
@@ -100,8 +100,7 @@ class NormalizedSEOEntry:
         return self.lsi_keywords or self.raw_data.get("internal_link_suggestions", [])
 
 
-@dataclass
-class SEOInputCollection:
+class SEOInputCollection(BasePydanticModel):
     """Collection of keyword intelligence records loaded from CSV/JSON.
 
     Attributes:
@@ -116,7 +115,7 @@ class SEOInputCollection:
 
     source_type: str = "none"
     source_path: str | None = None
-    records: list[NormalizedSEOEntry] = field(default_factory=list)
+    records: list[NormalizedSEOEntry] = Field(default_factory=list)
     records_loaded: int = 0
     matched_pages: int = 0
     unmatched_records: int = 0
